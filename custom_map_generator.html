@@ -1,0 +1,2100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>World Map — Country Selector</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #06090f;
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --highlight: #f59e0b;
+    --highlight-soft: rgba(245,158,11,0.18);
+    --highlight-border: rgba(245,158,11,0.3);
+    --panel-bg: #0d1220;
+    --panel-border: #1e293b;
+    --control-hover: #253350;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    height: 100vh; overflow: hidden; user-select: none;
+  }
+  .app { width:100%; height:100vh; display:flex; flex-direction:column; }
+  .map-wrap { flex:1; position:relative; overflow:hidden; }
+  #map-canvas { width:100%; height:100%; display:block; cursor:grab; }
+  #map-canvas:active { cursor:grabbing; }
+
+  .zoom-controls {
+    position:absolute; bottom:5rem; right:1rem;
+    display:flex; flex-direction:column; gap:1px; z-index:20;
+  }
+  .zoom-btn {
+    width:34px; height:34px;
+    background:rgba(13,18,32,0.92); border:1px solid var(--panel-border);
+    color:var(--text); font-size:1.1rem;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:all 0.2s; font-family:'DM Sans',sans-serif;
+  }
+  .zoom-btn:first-child { border-radius:6px 6px 0 0; }
+  .zoom-btn:last-child  { border-radius:0 0 6px 6px; }
+  .zoom-btn:hover { background:var(--control-hover); }
+
+  .bottom-bar {
+    position:relative; z-index:30;
+    background: var(--panel-bg); border-top: 1px solid var(--panel-border);
+    padding: 0.65rem 1.2rem;
+    display: flex; align-items: center; gap: 0.7rem; min-height: 52px;
+  }
+  .selected-list {
+    flex:1; display:flex; gap:0.45rem; flex-wrap:wrap; align-items:center;
+    max-height: 60px; overflow-y: auto;
+  }
+  .selected-tag {
+    background: var(--highlight-soft); border: 1px solid var(--highlight-border);
+    color: var(--highlight); padding: 0.25rem 0.55rem; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 600; white-space: nowrap;
+    display: flex; align-items: center; gap: 0.25rem; cursor: pointer; transition: all 0.15s;
+  }
+  .selected-tag:hover { background: var(--highlight-soft); filter: brightness(1.18); }
+  .selected-tag .x { opacity:0.5; margin-left:0.1rem; font-size:0.8rem; }
+  .selected-tag:hover .x { opacity:1; }
+  .empty-msg { font-size:0.75rem; color:var(--text-dim); font-style:italic; }
+
+  .bar-btn {
+    background: transparent; color: var(--text-dim);
+    border: 1px solid var(--panel-border);
+    padding: 0.42rem 0.75rem; border-radius: 6px;
+    font-size: 0.68rem; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;
+    cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.2s; white-space: nowrap;
+  }
+  .bar-btn:hover { background:var(--control-hover); color:var(--text); }
+
+  .select-btn {
+    background: var(--highlight); color: #000; border: none;
+    padding: 0.42rem 0.9rem; border-radius: 6px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+    cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.2s; white-space: nowrap;
+    display: flex; align-items:center; gap:0.35rem;
+  }
+  .select-btn:hover { filter: brightness(1.08); }
+
+  /* Dropdown */
+  .dropdown-overlay { display:none; position:fixed; inset:0; z-index:90; }
+  .dropdown-overlay.open { display:block; }
+  .dropdown-panel {
+    position: fixed; bottom: 52px; right: 0.5rem;
+    width: 340px; max-height: 72vh;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 10px 10px 0 0; box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
+    z-index: 100; display: none; flex-direction: column; overflow: hidden;
+  }
+  .dropdown-panel.open { display:flex; }
+
+  .dropdown-header {
+    padding: 0.75rem 1rem; border-bottom: 1px solid var(--panel-border);
+    display: flex; justify-content:space-between; align-items:center; gap:0.5rem;
+  }
+  .dropdown-header span { font-size:0.78rem; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; }
+  .dropdown-close {
+    background:none; border:none; color:var(--text-dim);
+    font-size:1.2rem; cursor:pointer; padding:0.15rem; line-height:1; flex-shrink:0;
+  }
+  .dropdown-close:hover { color:var(--text); }
+
+  .dropdown-search { padding:0.55rem 0.8rem; border-bottom:1px solid var(--panel-border); }
+  .dropdown-search input {
+    width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--panel-border);
+    color:var(--text); padding:0.4rem 0.65rem; border-radius:6px;
+    font-size:0.8rem; font-family:'DM Sans',sans-serif; outline:none; transition:border-color 0.2s;
+  }
+  .dropdown-search input::placeholder { color:var(--text-dim); }
+  .dropdown-search input:focus { border-color:var(--highlight); }
+
+  /* Continent quick-select buttons */
+  .continent-btns {
+    display:flex; gap:0.4rem; flex-wrap:wrap;
+    padding:0.55rem 0.8rem; border-bottom:1px solid var(--panel-border);
+  }
+  .continent-btn {
+    padding:0.3rem 0.65rem; border-radius:20px;
+    font-size:0.68rem; font-weight:600; letter-spacing:0.4px;
+    cursor:pointer; border:1px solid var(--panel-border);
+    background:rgba(255,255,255,0.04); color:var(--text-dim);
+    font-family:'DM Sans',sans-serif; transition:all 0.15s; white-space:nowrap;
+  }
+  .continent-btn:hover { background:var(--control-hover); color:var(--text); }
+  .continent-btn.active { background:var(--highlight); border-color:var(--highlight); color:#000; }
+  .continent-btn.partial { border-color:var(--highlight); color:var(--highlight); }
+
+  .dropdown-list { flex:1; overflow-y:auto; padding:0.3rem 0; }
+  .dropdown-list::-webkit-scrollbar { width:4px; }
+  .dropdown-list::-webkit-scrollbar-thumb { background:var(--panel-border); border-radius:3px; }
+
+  .dropdown-item {
+    display:flex; align-items:center; gap:0.55rem;
+    padding:0.42rem 0.8rem; cursor:pointer; transition:background 0.1s; font-size:0.8rem;
+  }
+  .dropdown-item:hover { background:var(--control-hover); }
+  .check {
+    width:16px; height:16px; border-radius:3px; border:1.5px solid var(--panel-border);
+    display:flex; align-items:center; justify-content:center;
+    transition:all 0.15s; flex-shrink:0;
+  }
+  .dropdown-item.selected .check { background:var(--highlight); border-color:var(--highlight); }
+  .dropdown-item.selected .check::after { content:'✓'; color:#000; font-size:0.65rem; font-weight:700; }
+  .dropdown-item .flag { font-size:1rem; width:1.3rem; text-align:center; }
+  .cname { flex:1; }
+  .dropdown-item.selected .cname { color:var(--highlight); font-weight:600; }
+
+  .dropdown-actions {
+    padding:0.45rem 0.8rem; border-top:1px solid var(--panel-border);
+    display:flex; gap:0.4rem; justify-content:flex-end; flex-shrink:0;
+  }
+  .dropdown-actions button {
+    background:rgba(255,255,255,0.05); border:1px solid var(--panel-border);
+    color:var(--text-dim); padding:0.3rem 0.6rem; border-radius:4px;
+    font-size:0.65rem; font-weight:500; cursor:pointer;
+    font-family:'DM Sans',sans-serif; text-transform:uppercase; letter-spacing:0.5px; transition:all 0.15s;
+  }
+  .dropdown-actions button:hover { color:var(--text); background:rgba(255,255,255,0.08); }
+
+  .tooltip {
+    position:fixed; background:var(--panel-bg); border:1px solid var(--panel-border);
+    color:var(--text); padding:0.4rem 0.75rem; border-radius:6px;
+    font-size:0.78rem; font-weight:500; pointer-events:none; opacity:0;
+    transition:opacity 0.12s; z-index:200; box-shadow:0 4px 20px rgba(0,0,0,0.5); white-space:nowrap;
+  }
+  .tooltip.hl { border-color:var(--highlight); }
+
+  .loading {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    z-index:50; background:var(--bg); transition:opacity 0.5s;
+  }
+  .loading.hidden { opacity:0; pointer-events:none; }
+  .spinner {
+    width:28px; height:28px; border:3px solid #1e293b; border-top-color:var(--highlight);
+    border-radius:50%; animation:spin 0.8s linear infinite;
+  }
+  /* Options panel */
+  .options-panel {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: min(390px, 92vw);
+    background: var(--panel-bg); border-left: 1px solid var(--panel-border);
+    box-shadow: -18px 0 55px rgba(0,0,0,0.42);
+    z-index: 110; display: flex; flex-direction: column; overflow: hidden;
+    transform: translateX(100%);
+    transition: transform 0.24s ease;
+  }
+  .options-panel.open { transform: translateX(0); }
+  .options-header {
+    padding: 1rem 1.1rem; border-bottom: 1px solid var(--panel-border);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-shrink: 0;
+  }
+  .options-header span { font-size:0.78rem; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; }
+  .options-tabs {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.35rem;
+    padding: 0.55rem; border-bottom: 1px solid var(--panel-border); flex-shrink: 0;
+  }
+  .options-tab {
+    border: 1px solid var(--panel-border); border-radius: 7px;
+    background: transparent; color: var(--text-dim);
+    padding: 0.45rem 0.6rem; font: 700 0.68rem 'DM Sans', sans-serif;
+    letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer;
+  }
+  .options-tab:hover { background: var(--control-hover); color: var(--text); }
+  .options-tab.active { background: var(--highlight-soft); border-color: var(--highlight); color: var(--highlight); }
+  .options-tab-panel { display: none; }
+  .options-tab-panel.active { display: block; }
+  .options-body { padding: 0.5rem 0 1rem; overflow-y: auto; flex: 1; }
+  .options-body::-webkit-scrollbar { width:4px; }
+  .options-body::-webkit-scrollbar-thumb { background:var(--panel-border); border-radius:3px; }
+  .option-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.8rem 1rem; cursor: pointer; transition: background 0.12s; gap: 1rem;
+  }
+  .option-row:hover { background: var(--control-hover); }
+  .option-label { display: flex; align-items: center; gap: 0.7rem; }
+  .option-icon { font-size: 1.1rem; width: 1.4rem; text-align: center; }
+  .option-title { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+  .option-desc { font-size: 0.68rem; color: var(--text-dim); margin-top: 0.1rem; }
+
+  /* Toggle switch */
+  .toggle {
+    width: 40px; height: 22px; border-radius: 11px;
+    background: var(--panel-border); position: relative;
+    transition: background 0.2s; flex-shrink: 0; cursor: pointer;
+  }
+  .toggle.on { background: var(--highlight); }
+  .toggle-thumb {
+    position: absolute; top: 3px; left: 3px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; transition: transform 0.2s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .toggle.on .toggle-thumb { transform: translateX(18px); }
+
+  .options-divider {
+    height: 1px; background: var(--panel-border); margin: 0.3rem 0;
+  }
+  .theme-section { padding: 0.75rem 1rem 1rem; }
+  .theme-title {
+    display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.75rem;
+  }
+  .theme-group-label {
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.7px;
+    color: var(--text-dim); text-transform: uppercase; margin: 0.55rem 0 0.35rem;
+  }
+  .theme-grid {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45rem;
+  }
+  .theme-btn {
+    min-height: 54px; border-radius: 7px; border: 1px solid var(--panel-border);
+    background: rgba(255,255,255,0.03); color: var(--text);
+    cursor: pointer; font-family: 'DM Sans', sans-serif; text-align: left;
+    padding: 0.5rem; display: grid; grid-template-columns: 1fr auto; gap: 0.45rem;
+    align-items: center; transition: all 0.15s;
+  }
+  .theme-btn:hover { background: var(--control-hover); }
+  .theme-btn.active {
+    border-color: var(--highlight); box-shadow: inset 0 0 0 1px var(--highlight);
+  }
+  .theme-name { font-size: 0.72rem; font-weight: 700; line-height: 1.05; }
+  .theme-style { font-size: 0.58rem; color: var(--text-dim); margin-top: 0.18rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .theme-swatches { display: flex; gap: 2px; align-items: center; }
+  .theme-swatch { width: 12px; height: 24px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.18); }
+  .color-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.75rem 1rem; gap: 1rem;
+  }
+  .color-picker {
+    width: 36px; height: 28px;
+    border: 1px solid var(--panel-border); border-radius: 6px;
+    background: none; cursor: pointer; padding: 2px;
+    flex-shrink: 0; overflow: hidden;
+  }
+  .color-picker::-webkit-color-swatch-wrapper { padding: 0; }
+  .color-picker::-webkit-color-swatch { border: none; border-radius: 4px; }
+  .poly-section { padding: 0.75rem 1rem 1rem; }
+  .poly-card {
+    border: 1px solid var(--panel-border); border-radius: 8px;
+    background: rgba(255,255,255,0.03); overflow: hidden; margin-bottom: 0.65rem;
+  }
+  .poly-card .option-row { padding: 0.75rem; }
+  .range-row {
+    padding: 0 0.75rem 0.75rem; display: grid; gap: 0.35rem;
+  }
+  .poly-card:not(.enabled) .range-row { display: none; }
+  .neon-section { padding: 0.75rem 1rem 1rem; }
+  .neon-section:not(.enabled) .range-row,
+  .neon-section:not(.enabled) .color-row,
+  .neon-section:not(.enabled) .neon-sub-option { display: none; }
+  .gradient-section { padding: 0.75rem 1rem 1rem; }
+  .gradient-section:not(.enabled) .range-row,
+  .gradient-section:not(.enabled) .color-row,
+  .gradient-section:not(.enabled) .gradient-sub-option { display: none; }
+  .segmented {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem;
+    padding: 0.25rem; border: 1px solid var(--panel-border);
+    border-radius: 8px; background: rgba(255,255,255,0.03);
+  }
+  .segment-btn {
+    border: 0; border-radius: 5px; background: transparent; color: var(--text-dim);
+    padding: 0.42rem 0.5rem; font: 700 0.66rem 'DM Sans', sans-serif;
+    letter-spacing: 0.45px; text-transform: uppercase; cursor: pointer;
+  }
+  .segment-btn.active { background: var(--highlight); color: #000; }
+  .range-label {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.66rem; color: var(--text-dim); font-weight: 700;
+    letter-spacing: 0.45px; text-transform: uppercase;
+  }
+  .range-value { color: var(--text); font-variant-numeric: tabular-nums; }
+  .range-input { width: 100%; accent-color: var(--highlight); cursor: pointer; }
+
+  .source-section {
+    padding: 0.75rem 1rem 1rem;
+  }
+  .source-panel {
+    position: fixed; bottom: 52px; right: 5.9rem;
+    width: 300px;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 10px 10px 0 0; box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
+    z-index: 100; display: none; flex-direction: column; overflow: hidden;
+  }
+  .source-panel.open { display: flex; }
+  .source-panel .source-section { padding-top: 1rem; }
+  .source-title {
+    display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.75rem;
+  }
+  .source-btns {
+    display: flex; flex-direction: column; gap: 0.4rem;
+  }
+  .source-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.55rem 0.8rem; border-radius: 7px;
+    border: 1px solid var(--panel-border);
+    background: rgba(255,255,255,0.03);
+    cursor: pointer; transition: all 0.15s; text-align: left;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .source-btn:hover { background: rgba(255,255,255,0.07); border-color: #2a3a55; }
+  .source-btn.active { border-color: var(--highlight); background: var(--highlight-soft); }
+  .source-btn.loading { opacity: 0.5; pointer-events: none; }
+  .source-name { font-size: 0.78rem; font-weight: 600; color: var(--text); }
+  .source-btn.active .source-name { color: var(--highlight); }
+  .source-sub { font-size: 0.65rem; color: var(--text-dim); margin-top: 0.1rem; }
+  .source-loading {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.5rem 0; font-size: 0.72rem; color: var(--text-dim);
+  }
+  .source-spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--panel-border); border-top-color: var(--highlight);
+    border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
+  }
+
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="map-wrap">
+    <div class="loading" id="loading"><div class="spinner"></div></div>
+    <canvas id="map-canvas"></canvas>
+    <div class="zoom-controls">
+      <button class="zoom-btn" id="zoomIn">+</button>
+      <button class="zoom-btn" id="zoomOut">−</button>
+    </div>
+  </div>
+  <div class="bottom-bar">
+    <div class="selected-list" id="selectedList"></div>
+    <button class="bar-btn" id="fitBtn">Fit</button>
+    <button class="bar-btn" id="resetBtn">Reset</button>
+    <button class="bar-btn" id="sourcePanelBtn">Detail</button>
+    <button class="bar-btn" id="optionsBtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Options
+    </button>
+    <button class="select-btn" id="selectBtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Select
+    </button>
+  </div>
+  <div class="dropdown-overlay" id="dropdownOverlay"></div>
+
+  <!-- Options panel -->
+  <div class="options-panel" id="optionsPanel">
+    <div class="options-header">
+      <span>Display Options</span>
+      <button class="dropdown-close" id="optionsClose">✕</button>
+    </div>
+    <div class="options-tabs">
+      <button class="options-tab active" data-tab="generalOptionsTab" type="button">General</button>
+      <button class="options-tab" data-tab="lowPolyOptionsTab" type="button">Low Poly</button>
+      <button class="options-tab" data-tab="gradientOptionsTab" type="button">Gradient</button>
+      <button class="options-tab" data-tab="neonOptionsTab" type="button">Neon</button>
+      <button class="options-tab" data-tab="themesOptionsTab" type="button">Themes</button>
+    </div>
+    <div class="options-body options-tab-panel" id="themesOptionsTab">
+      <div class="theme-section">
+        <div class="theme-title">
+          <span class="option-icon">◈</span>
+          <div>
+            <div class="option-title">Themes</div>
+            <div class="option-desc">Complete presets for map and controls</div>
+          </div>
+        </div>
+        <label class="option-row">
+          <div class="option-label">
+            <span class="option-icon">▱</span>
+            <div>
+              <div class="option-title">Low Poly Themes</div>
+              <div class="option-desc">Switch between clean and polygon presets</div>
+            </div>
+          </div>
+          <div class="toggle" id="toggleThemeGroup">
+            <div class="toggle-thumb"></div>
+          </div>
+        </label>
+        <div class="theme-group-label">Dark</div>
+        <div class="theme-grid" id="darkThemeGrid"></div>
+        <div class="theme-group-label">Light</div>
+        <div class="theme-grid" id="lightThemeGrid"></div>
+      </div>
+    </div>
+    <div class="options-body options-tab-panel active" id="generalOptionsTab">
+      <label class="option-row">
+        <div class="option-label">
+          <span class="option-icon">🏷️</span>
+          <div>
+            <div class="option-title">Country Names</div>
+            <div class="option-desc">Show label on highlighted countries</div>
+          </div>
+        </div>
+        <div class="toggle" id="toggleNames">
+          <div class="toggle-thumb"></div>
+        </div>
+      </label>
+      <label class="option-row">
+        <div class="option-label">
+          <span class="option-icon">🗺️</span>
+          <div>
+            <div class="option-title">Country Borders</div>
+            <div class="option-desc">Show border lines between countries</div>
+          </div>
+        </div>
+        <div class="toggle" id="toggleBorders">
+          <div class="toggle-thumb"></div>
+        </div>
+      </label>
+      <label class="option-row">
+        <div class="option-label">
+          <span class="option-icon">◎</span>
+          <div>
+            <div class="option-title">Map Picking</div>
+            <div class="option-desc">Hover and click countries on the map</div>
+          </div>
+        </div>
+        <div class="toggle" id="toggleHover">
+          <div class="toggle-thumb"></div>
+        </div>
+      </label>
+      <div class="options-divider"></div>
+      <div class="color-row">
+        <div class="option-label">
+          <span class="option-icon">🌊</span>
+          <div>
+            <div class="option-title">Background</div>
+            <div class="option-desc">Sea / map background color</div>
+          </div>
+        </div>
+        <input type="color" id="colorBg" class="color-picker" value="#060a12"/>
+      </div>
+      <div class="color-row">
+        <div class="option-label">
+          <span class="option-icon">🔲</span>
+          <div>
+            <div class="option-title">Border Color</div>
+            <div class="option-desc">Country border line color</div>
+          </div>
+        </div>
+        <input type="color" id="colorBorder" class="color-picker" value="#243048"/>
+      </div>
+      <div class="color-row">
+        <div class="option-label">
+          <span class="option-icon">◆</span>
+          <div>
+            <div class="option-title">Default Countries</div>
+            <div class="option-desc">Color of unselected countries</div>
+          </div>
+        </div>
+        <input type="color" id="colorLand" class="color-picker" value="#1a2236"/>
+      </div>
+      <div class="color-row">
+        <div class="option-label">
+          <span class="option-icon">✨</span>
+          <div>
+            <div class="option-title">Selected Color</div>
+            <div class="option-desc">Color of highlighted countries</div>
+          </div>
+        </div>
+        <input type="color" id="colorSelected" class="color-picker" value="#f59e0b"/>
+      </div>
+    </div>
+    <div class="options-body options-tab-panel" id="lowPolyOptionsTab">
+      <div class="poly-section">
+        <div class="poly-card" data-poly-card="selected">
+          <label class="option-row">
+            <div class="option-label">
+              <span class="option-icon">▰</span>
+              <div>
+                <div class="option-title">Selected Countries</div>
+                <div class="option-desc">Low-poly on highlighted countries</div>
+              </div>
+            </div>
+            <div class="toggle" id="toggleFacets"><div class="toggle-thumb"></div></div>
+          </label>
+          <div class="range-row">
+            <label class="range-label" for="densitySelected">Density <span class="range-value" id="densitySelectedValue"></span></label>
+            <input class="range-input" id="densitySelected" type="range" min="1" max="20" step="1"/>
+          </div>
+          <div class="range-row">
+            <label class="range-label" for="contrastSelected">Contrast <span class="range-value" id="contrastSelectedValue"></span></label>
+            <input class="range-input" id="contrastSelected" type="range" min="1" max="10" step="1"/>
+          </div>
+        </div>
+        <div class="poly-card" data-poly-card="land">
+          <label class="option-row">
+            <div class="option-label">
+              <span class="option-icon">◇</span>
+              <div>
+                <div class="option-title">Default Countries</div>
+                <div class="option-desc">Low-poly on unselected countries</div>
+              </div>
+            </div>
+            <div class="toggle" id="toggleLandFacets"><div class="toggle-thumb"></div></div>
+          </label>
+          <div class="range-row">
+            <label class="range-label" for="densityLand">Density <span class="range-value" id="densityLandValue"></span></label>
+            <input class="range-input" id="densityLand" type="range" min="1" max="10" step="1"/>
+          </div>
+          <div class="range-row">
+            <label class="range-label" for="contrastLand">Contrast <span class="range-value" id="contrastLandValue"></span></label>
+            <input class="range-input" id="contrastLand" type="range" min="0" max="5" step="1"/>
+          </div>
+        </div>
+        <div class="poly-card" data-poly-card="background">
+          <label class="option-row">
+            <div class="option-label">
+              <span class="option-icon">◭</span>
+              <div>
+                <div class="option-title">Background</div>
+                <div class="option-desc">Low-poly sea background</div>
+              </div>
+            </div>
+            <div class="toggle" id="toggleBgFacets"><div class="toggle-thumb"></div></div>
+          </label>
+          <div class="range-row">
+            <label class="range-label" for="densityBg">Density <span class="range-value" id="densityBgValue"></span></label>
+            <input class="range-input" id="densityBg" type="range" min="1" max="10" step="1"/>
+          </div>
+          <div class="range-row">
+            <label class="range-label" for="contrastBg">Contrast <span class="range-value" id="contrastBgValue"></span></label>
+            <input class="range-input" id="contrastBg" type="range" min="1" max="10" step="1"/>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="options-body options-tab-panel" id="neonOptionsTab">
+      <div class="neon-section" id="neonSection">
+        <label class="option-row">
+          <div class="option-label">
+            <span class="option-icon">✦</span>
+            <div>
+              <div class="option-title">Neon Borders</div>
+              <div class="option-desc">Glowing outline effect on country borders</div>
+            </div>
+          </div>
+          <div class="toggle" id="toggleNeon"><div class="toggle-thumb"></div></div>
+        </label>
+        <div class="range-row neon-sub-option">
+          <div class="range-label">Apply To <span class="range-value" id="neonScopeValue">Selected</span></div>
+          <div class="segmented" id="neonScopeControl">
+            <button class="segment-btn active" data-neon-scope="selected" type="button">Selected</button>
+            <button class="segment-btn" data-neon-scope="all" type="button">All</button>
+          </div>
+        </div>
+        <div class="color-row">
+          <div class="option-label">
+            <span class="option-icon">✧</span>
+            <div>
+              <div class="option-title">Neon Color</div>
+              <div class="option-desc">Glow and outline color</div>
+            </div>
+          </div>
+          <input type="color" id="colorNeon" class="color-picker" value="#7CFF3A"/>
+        </div>
+        <div class="range-row">
+          <label class="range-label" for="neonIntensity">Intensity <span class="range-value" id="neonIntensityValue"></span></label>
+          <input class="range-input" id="neonIntensity" type="range" min="1" max="10" step="1"/>
+        </div>
+        <div class="range-row">
+          <label class="range-label" for="neonBlur">Glow <span class="range-value" id="neonBlurValue"></span></label>
+          <input class="range-input" id="neonBlur" type="range" min="1" max="20" step="1"/>
+        </div>
+        <div class="range-row">
+          <label class="range-label" for="neonWidth">Line Width <span class="range-value" id="neonWidthValue"></span></label>
+          <input class="range-input" id="neonWidth" type="range" min="1" max="10" step="1"/>
+        </div>
+      </div>
+    </div>
+    <div class="options-body options-tab-panel" id="gradientOptionsTab">
+      <div class="gradient-section" id="gradientSection">
+        <label class="option-row">
+          <div class="option-label">
+            <span class="option-icon">◒</span>
+            <div>
+              <div class="option-title">Color Gradient</div>
+              <div class="option-desc">Gradient fill effect on countries</div>
+            </div>
+          </div>
+          <div class="toggle" id="toggleGradient"><div class="toggle-thumb"></div></div>
+        </label>
+        <div class="range-row gradient-sub-option">
+          <div class="range-label">Apply To <span class="range-value" id="gradientScopeValue">Selected</span></div>
+          <div class="segmented">
+            <button class="segment-btn active" data-gradient-scope="selected" type="button">Selected</button>
+            <button class="segment-btn" data-gradient-scope="all" type="button">All</button>
+          </div>
+        </div>
+        <div class="color-row">
+          <div class="option-label">
+            <span class="option-icon">◐</span>
+            <div>
+              <div class="option-title">Start Color</div>
+              <div class="option-desc">First gradient color</div>
+            </div>
+          </div>
+          <input type="color" id="colorGradientA" class="color-picker" value="#38bdf8"/>
+        </div>
+        <div class="color-row">
+          <div class="option-label">
+            <span class="option-icon">◑</span>
+            <div>
+              <div class="option-title">End Color</div>
+              <div class="option-desc">Second gradient color</div>
+            </div>
+          </div>
+          <input type="color" id="colorGradientB" class="color-picker" value="#f472b6"/>
+        </div>
+        <div class="range-row">
+          <label class="range-label" for="gradientAngle">Direction <span class="range-value" id="gradientAngleValue"></span></label>
+          <input class="range-input" id="gradientAngle" type="range" min="0" max="360" step="15"/>
+        </div>
+        <div class="range-row">
+          <label class="range-label" for="gradientMix">Mix <span class="range-value" id="gradientMixValue"></span></label>
+          <input class="range-input" id="gradientMix" type="range" min="1" max="10" step="1"/>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="source-panel" id="sourcePanel">
+    <div class="source-section">
+      <div class="source-title">
+        <span class="option-icon">🗾</span>
+        <div>
+          <div class="option-title">Map Detail</div>
+          <div class="option-desc">Border accuracy vs file size</div>
+        </div>
+      </div>
+      <div class="source-btns" id="sourceBtns">
+        <button class="source-btn active" data-key="110m">
+          <div>
+            <div class="source-name">Low — 110m</div>
+            <div class="source-sub">Fast · ~500KB</div>
+          </div>
+        </button>
+        <button class="source-btn" data-key="50m">
+          <div>
+            <div class="source-name">Medium — 50m</div>
+            <div class="source-sub">Balanced · ~1.5MB</div>
+          </div>
+        </button>
+        <button class="source-btn" data-key="10m">
+          <div>
+            <div class="source-name">High — 10m</div>
+            <div class="source-sub">Detailed · ~4MB</div>
+          </div>
+        </button>
+      </div>
+      <div class="source-loading" id="sourceLoading" style="display:none">
+        <div class="source-spinner"></div>
+        <span>Loading map data…</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="dropdown-panel" id="dropdownPanel">
+    <div class="dropdown-header">
+      <span>Select Countries</span>
+      <button class="dropdown-close" id="dropdownClose">✕</button>
+    </div>
+    <div class="dropdown-search">
+      <input type="text" placeholder="Search countries…" id="searchInput" autocomplete="off"/>
+    </div>
+    <div class="continent-btns" id="continentBtns"></div>
+    <div class="dropdown-list" id="dropdownList"></div>
+    <div class="dropdown-actions">
+      <button id="actionDeselectAll">Clear All</button>
+    </div>
+  </div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ── ALL WORLD COUNTRIES ──
+// id -> { name, flag, region }
+const COUNTRIES_DB = {
+  '004':{ name:'Afghanistan', flag:'🇦🇫', region:'Asia' },
+  '008':{ name:'Albania', flag:'🇦🇱', region:'Europe' },
+  '012':{ name:'Algeria', flag:'🇩🇿', region:'Africa' },
+  '024':{ name:'Angola', flag:'🇦🇴', region:'Africa' },
+  '020':{ name:'Andorra', flag:'🇦🇩', region:'Europe' },
+  '032':{ name:'Argentina', flag:'🇦🇷', region:'Americas' },
+  '036':{ name:'Australia', flag:'🇦🇺', region:'Oceania' },
+  '040':{ name:'Austria', flag:'🇦🇹', region:'Europe' },
+  '031':{ name:'Azerbaijan', flag:'🇦🇿', region:'Europe' },
+  '050':{ name:'Bangladesh', flag:'🇧🇩', region:'Asia' },
+  '112':{ name:'Belarus', flag:'🇧🇾', region:'Europe' },
+  '056':{ name:'Belgium', flag:'🇧🇪', region:'Europe' },
+  '084':{ name:'Belize', flag:'🇧🇿', region:'Americas' },
+  '204':{ name:'Benin', flag:'🇧🇯', region:'Africa' },
+  '064':{ name:'Bhutan', flag:'🇧🇹', region:'Asia' },
+  '068':{ name:'Bolivia', flag:'🇧🇴', region:'Americas' },
+  '070':{ name:'Bosnia & Herz.', flag:'🇧🇦', region:'Europe' },
+  '072':{ name:'Botswana', flag:'🇧🇼', region:'Africa' },
+  '076':{ name:'Brazil', flag:'🇧🇷', region:'Americas' },
+  '096':{ name:'Brunei', flag:'🇧🇳', region:'Asia' },
+  '100':{ name:'Bulgaria', flag:'🇧🇬', region:'Europe' },
+  '854':{ name:'Burkina Faso', flag:'🇧🇫', region:'Africa' },
+  '108':{ name:'Burundi', flag:'🇧🇮', region:'Africa' },
+  '116':{ name:'Cambodia', flag:'🇰🇭', region:'Asia' },
+  '120':{ name:'Cameroon', flag:'🇨🇲', region:'Africa' },
+  '124':{ name:'Canada', flag:'🇨🇦', region:'Americas' },
+  '140':{ name:'Central African Rep.', flag:'🇨🇫', region:'Africa' },
+  '148':{ name:'Chad', flag:'🇹🇩', region:'Africa' },
+  '152':{ name:'Chile', flag:'🇨🇱', region:'Americas' },
+  '156':{ name:'China', flag:'🇨🇳', region:'Asia' },
+  '170':{ name:'Colombia', flag:'🇨🇴', region:'Americas' },
+  '174':{ name:'Comoros', flag:'🇰🇲', region:'Africa' },
+  '178':{ name:'Congo', flag:'🇨🇬', region:'Africa' },
+  '180':{ name:'DR Congo', flag:'🇨🇩', region:'Africa' },
+  '188':{ name:'Costa Rica', flag:'🇨🇷', region:'Americas' },
+  '384':{ name:"Côte d'Ivoire", flag:'🇨🇮', region:'Africa' },
+  '191':{ name:'Croatia', flag:'🇭🇷', region:'Europe' },
+  '192':{ name:'Cuba', flag:'🇨🇺', region:'Americas' },
+  '196':{ name:'Cyprus', flag:'🇨🇾', region:'Europe' },
+  '203':{ name:'Czech Republic', flag:'🇨🇿', region:'Europe' },
+  '208':{ name:'Denmark', flag:'🇩🇰', region:'Europe' },
+  '262':{ name:'Djibouti', flag:'🇩🇯', region:'Africa' },
+  '214':{ name:'Dominican Rep.', flag:'🇩🇴', region:'Americas' },
+  '218':{ name:'Ecuador', flag:'🇪🇨', region:'Americas' },
+  '818':{ name:'Egypt', flag:'🇪🇬', region:'Africa' },
+  '222':{ name:'El Salvador', flag:'🇸🇻', region:'Americas' },
+  '226':{ name:'Equatorial Guinea', flag:'🇬🇶', region:'Africa' },
+  '232':{ name:'Eritrea', flag:'🇪🇷', region:'Africa' },
+  '233':{ name:'Estonia', flag:'🇪🇪', region:'Europe' },
+  '748':{ name:'Eswatini', flag:'🇸🇿', region:'Africa' },
+  '231':{ name:'Ethiopia', flag:'🇪🇹', region:'Africa' },
+  '246':{ name:'Finland', flag:'🇫🇮', region:'Europe' },
+  '250':{ name:'France', flag:'🇫🇷', region:'Europe' },
+  '266':{ name:'Gabon', flag:'🇬🇦', region:'Africa' },
+  '270':{ name:'Gambia', flag:'🇬🇲', region:'Africa' },
+  '268':{ name:'Georgia', flag:'🇬🇪', region:'Europe' },
+  '276':{ name:'Germany', flag:'🇩🇪', region:'Europe' },
+  '288':{ name:'Ghana', flag:'🇬🇭', region:'Africa' },
+  '300':{ name:'Greece', flag:'🇬🇷', region:'Europe' },
+  '320':{ name:'Guatemala', flag:'🇬🇹', region:'Americas' },
+  '324':{ name:'Guinea', flag:'🇬🇳', region:'Africa' },
+  '624':{ name:'Guinea-Bissau', flag:'🇬🇼', region:'Africa' },
+  '328':{ name:'Guyana', flag:'🇬🇾', region:'Americas' },
+  '332':{ name:'Haiti', flag:'🇭🇹', region:'Americas' },
+  '340':{ name:'Honduras', flag:'🇭🇳', region:'Americas' },
+  '348':{ name:'Hungary', flag:'🇭🇺', region:'Europe' },
+  '352':{ name:'Iceland', flag:'🇮🇸', region:'Europe' },
+  '356':{ name:'India', flag:'🇮🇳', region:'Asia' },
+  '360':{ name:'Indonesia', flag:'🇮🇩', region:'Asia' },
+  '364':{ name:'Iran', flag:'🇮🇷', region:'Asia' },
+  '368':{ name:'Iraq', flag:'🇮🇶', region:'Asia' },
+  '372':{ name:'Ireland', flag:'🇮🇪', region:'Europe' },
+  '376':{ name:'Israel', flag:'🇮🇱', region:'Asia' },
+  '380':{ name:'Italy', flag:'🇮🇹', region:'Europe' },
+  '388':{ name:'Jamaica', flag:'🇯🇲', region:'Americas' },
+  '392':{ name:'Japan', flag:'🇯🇵', region:'Asia' },
+  '400':{ name:'Jordan', flag:'🇯🇴', region:'Asia' },
+  '398':{ name:'Kazakhstan', flag:'🇰🇿', region:'Asia' },
+  '404':{ name:'Kenya', flag:'🇰🇪', region:'Africa' },
+  '408':{ name:'North Korea', flag:'🇰🇵', region:'Asia' },
+  '410':{ name:'South Korea', flag:'🇰🇷', region:'Asia' },
+  '383':{ name:'Kosovo', flag:'🇽🇰', region:'Europe' },
+  '414':{ name:'Kuwait', flag:'🇰🇼', region:'Asia' },
+  '417':{ name:'Kyrgyzstan', flag:'🇰🇬', region:'Asia' },
+  '418':{ name:'Laos', flag:'🇱🇦', region:'Asia' },
+  '428':{ name:'Latvia', flag:'🇱🇻', region:'Europe' },
+  '422':{ name:'Lebanon', flag:'🇱🇧', region:'Asia' },
+  '426':{ name:'Lesotho', flag:'🇱🇸', region:'Africa' },
+  '430':{ name:'Liberia', flag:'🇱🇷', region:'Africa' },
+  '434':{ name:'Libya', flag:'🇱🇾', region:'Africa' },
+  '438':{ name:'Liechtenstein', flag:'🇱🇮', region:'Europe' },
+  '440':{ name:'Lithuania', flag:'🇱🇹', region:'Europe' },
+  '442':{ name:'Luxembourg', flag:'🇱🇺', region:'Europe' },
+  '807':{ name:'North Macedonia', flag:'🇲🇰', region:'Europe' },
+  '450':{ name:'Madagascar', flag:'🇲🇬', region:'Africa' },
+  '454':{ name:'Malawi', flag:'🇲🇼', region:'Africa' },
+  '458':{ name:'Malaysia', flag:'🇲🇾', region:'Asia' },
+  '466':{ name:'Mali', flag:'🇲🇱', region:'Africa' },
+  '470':{ name:'Malta', flag:'🇲🇹', region:'Europe' },
+  '478':{ name:'Mauritania', flag:'🇲🇷', region:'Africa' },
+  '732':{ name:'Western Sahara', flag:'🇪🇭', region:'Africa' },
+  '304':{ name:'Greenland', flag:'🇬🇱', region:'Americas' },
+  '238':{ name:'Falkland Islands', flag:'🇫🇰', region:'Americas' },
+  '254':{ name:'French Guiana', flag:'🇬🇫', region:'Americas' },
+  '630':{ name:'Puerto Rico', flag:'🇵🇷', region:'Americas' },
+  '242':{ name:'Fiji', flag:'🇫🇯', region:'Oceania' },
+  '540':{ name:'New Caledonia', flag:'🇳🇨', region:'Oceania' },
+  '258':{ name:'French Polynesia', flag:'🇵🇫', region:'Oceania' },
+  '484':{ name:'Mexico', flag:'🇲🇽', region:'Americas' },
+  '496':{ name:'Mongolia', flag:'🇲🇳', region:'Asia' },
+  '499':{ name:'Montenegro', flag:'🇲🇪', region:'Europe' },
+  '504':{ name:'Morocco', flag:'🇲🇦', region:'Africa' },
+  '508':{ name:'Mozambique', flag:'🇲🇿', region:'Africa' },
+  '104':{ name:'Myanmar', flag:'🇲🇲', region:'Asia' },
+  '516':{ name:'Namibia', flag:'🇳🇦', region:'Africa' },
+  '524':{ name:'Nepal', flag:'🇳🇵', region:'Asia' },
+  '528':{ name:'Netherlands', flag:'🇳🇱', region:'Europe' },
+  '554':{ name:'New Zealand', flag:'🇳🇿', region:'Oceania' },
+  '558':{ name:'Nicaragua', flag:'🇳🇮', region:'Americas' },
+  '562':{ name:'Niger', flag:'🇳🇪', region:'Africa' },
+  '566':{ name:'Nigeria', flag:'🇳🇬', region:'Africa' },
+  '578':{ name:'Norway', flag:'🇳🇴', region:'Europe' },
+  '512':{ name:'Oman', flag:'🇴🇲', region:'Asia' },
+  '586':{ name:'Pakistan', flag:'🇵🇰', region:'Asia' },
+  '591':{ name:'Panama', flag:'🇵🇦', region:'Americas' },
+  '598':{ name:'Papua New Guinea', flag:'🇵🇬', region:'Oceania' },
+  '600':{ name:'Paraguay', flag:'🇵🇾', region:'Americas' },
+  '604':{ name:'Peru', flag:'🇵🇪', region:'Americas' },
+  '608':{ name:'Philippines', flag:'🇵🇭', region:'Asia' },
+  '616':{ name:'Poland', flag:'🇵🇱', region:'Europe' },
+  '620':{ name:'Portugal', flag:'🇵🇹', region:'Europe' },
+  '634':{ name:'Qatar', flag:'🇶🇦', region:'Asia' },
+  '642':{ name:'Romania', flag:'🇷🇴', region:'Europe' },
+  '643':{ name:'Russia', flag:'🇷🇺', region:'Europe' },
+  '646':{ name:'Rwanda', flag:'🇷🇼', region:'Africa' },
+  '682':{ name:'Saudi Arabia', flag:'🇸🇦', region:'Asia' },
+  '686':{ name:'Senegal', flag:'🇸🇳', region:'Africa' },
+  '688':{ name:'Serbia', flag:'🇷🇸', region:'Europe' },
+  '694':{ name:'Sierra Leone', flag:'🇸🇱', region:'Africa' },
+  '703':{ name:'Slovakia', flag:'🇸🇰', region:'Europe' },
+  '705':{ name:'Slovenia', flag:'🇸🇮', region:'Europe' },
+  '706':{ name:'Somalia', flag:'🇸🇴', region:'Africa' },
+  '710':{ name:'South Africa', flag:'🇿🇦', region:'Africa' },
+  '728':{ name:'South Sudan', flag:'🇸🇸', region:'Africa' },
+  '724':{ name:'Spain', flag:'🇪🇸', region:'Europe' },
+  '144':{ name:'Sri Lanka', flag:'🇱🇰', region:'Asia' },
+  '729':{ name:'Sudan', flag:'🇸🇩', region:'Africa' },
+  '740':{ name:'Suriname', flag:'🇸🇷', region:'Americas' },
+  '752':{ name:'Sweden', flag:'🇸🇪', region:'Europe' },
+  '756':{ name:'Switzerland', flag:'🇨🇭', region:'Europe' },
+  '760':{ name:'Syria', flag:'🇸🇾', region:'Asia' },
+  '762':{ name:'Tajikistan', flag:'🇹🇯', region:'Asia' },
+  '834':{ name:'Tanzania', flag:'🇹🇿', region:'Africa' },
+  '764':{ name:'Thailand', flag:'🇹🇭', region:'Asia' },
+  '626':{ name:'Timor-Leste', flag:'🇹🇱', region:'Asia' },
+  '768':{ name:'Togo', flag:'🇹🇬', region:'Africa' },
+  '780':{ name:'Trinidad & Tobago', flag:'🇹🇹', region:'Americas' },
+  '788':{ name:'Tunisia', flag:'🇹🇳', region:'Africa' },
+  '792':{ name:'Turkey', flag:'🇹🇷', region:'Europe' },
+  '795':{ name:'Turkmenistan', flag:'🇹🇲', region:'Asia' },
+  '800':{ name:'Uganda', flag:'🇺🇬', region:'Africa' },
+  '804':{ name:'Ukraine', flag:'🇺🇦', region:'Europe' },
+  '784':{ name:'United Arab Emirates', flag:'🇦🇪', region:'Asia' },
+  '826':{ name:'United Kingdom', flag:'🇬🇧', region:'Europe' },
+  '840':{ name:'United States', flag:'🇺🇸', region:'Americas' },
+  '858':{ name:'Uruguay', flag:'🇺🇾', region:'Americas' },
+  '860':{ name:'Uzbekistan', flag:'🇺🇿', region:'Asia' },
+  '862':{ name:'Venezuela', flag:'🇻🇪', region:'Americas' },
+  '704':{ name:'Vietnam', flag:'🇻🇳', region:'Asia' },
+  '887':{ name:'Yemen', flag:'🇾🇪', region:'Asia' },
+  '894':{ name:'Zambia', flag:'🇿🇲', region:'Africa' },
+  '716':{ name:'Zimbabwe', flag:'🇿🇼', region:'Africa' },
+  '498':{ name:'Moldova', flag:'🇲🇩', region:'Europe' },
+  '051':{ name:'Armenia', flag:'🇦🇲', region:'Europe' },
+  '275':{ name:'Palestine', flag:'🇵🇸', region:'Asia' },
+  '492':{ name:'Monaco', flag:'🇲🇨', region:'Europe' },
+  '336':{ name:'Vatican City', flag:'🇻🇦', region:'Europe' },
+  '674':{ name:'San Marino', flag:'🇸🇲', region:'Europe' },
+  '048':{ name:'Bahrain', flag:'🇧🇭', region:'Asia' },
+};
+
+const PRE_HIGHLIGHTED = new Set(['Italy']);
+
+
+let allCountries = [];
+let highlighted = new Set(PRE_HIGHLIGHTED);
+let hovered = null;
+let transform = { x:0, y:0, scale:1 };
+let dragging = false, dragStart={x:0,y:0}, transformStart={x:0,y:0};
+let animating = false;
+let showNames = true;
+let showBorders = true;
+let showHoverHighlight = false;
+let showNeon = false;
+let neonScope = 'selected';
+let neonColor = '#7CFF3A';
+let neonIntensity = 6;
+let neonBlur = 12;
+let neonWidth = 3;
+let showGradient = false;
+let gradientScope = 'selected';
+let gradientColorA = '#38bdf8';
+let gradientColorB = '#f472b6';
+let gradientAngle = 45;
+let gradientMix = 8;
+let showFacets = false;
+let showBgFacets = false;
+let showLandFacets = false;
+let densitySelected = 6;
+let contrastSelected = 10;
+let densityLand = 4;
+let contrastLand = 1;
+let densityBg = 4;
+let contrastBg = 4;
+let colorBg = '#060a12';
+let colorBorder = '#243048';
+let colorSelected = '#f59e0b';
+let colorLand = '#1a2236';
+let colorLandHover = '#253350';
+let colorLabelBg = 'rgba(0,0,0,0.65)';
+let colorLabelText = '#ffffff';
+const MAP_REPEAT_SPACING = 0.78;
+
+const THEMES = {
+  ember: { family:'clean', group:'dark', label:'Ember Grid', style:'futuristic', showNames:true, showBorders:true, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#060a12', text:'#e2e8f0', textDim:'#7c8aa3', panelBg:'#0d1220', panelBorder:'#243048', controlHover:'#1b2a44', highlight:'#f59e0b', highlightSoft:'rgba(245,158,11,0.18)', highlightBorder:'rgba(245,158,11,0.36)', land:'#1a2236', landHover:'#253350', labelBg:'rgba(0,0,0,0.66)', labelText:'#ffffff' },
+  polar: { family:'clean', group:'dark', label:'Polar Night', style:'classic', showNames:true, showBorders:true, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#07111d', text:'#e8f3ff', textDim:'#8ba2b8', panelBg:'#0d1824', panelBorder:'#26394d', controlHover:'#17283a', highlight:'#7dd3fc', highlightSoft:'rgba(125,211,252,0.16)', highlightBorder:'rgba(125,211,252,0.38)', land:'#172638', landHover:'#20374f', labelBg:'rgba(4,14,24,0.72)', labelText:'#f8fbff' },
+  graphite: { family:'clean', group:'dark', label:'Graphite Brass', style:'classic', showNames:false, showBorders:true, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#11100e', text:'#eee8dd', textDim:'#9b9285', panelBg:'#1a1815', panelBorder:'#3a3328', controlHover:'#28231c', highlight:'#d6a85d', highlightSoft:'rgba(214,168,93,0.18)', highlightBorder:'rgba(214,168,93,0.38)', land:'#25211b', landHover:'#342d23', labelBg:'rgba(15,13,10,0.74)', labelText:'#fff7e8' },
+  obsidian: { family:'clean', group:'dark', label:'Obsidian Mint', style:'modern', showNames:true, showBorders:true, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#050f0f', text:'#d9fff5', textDim:'#7ca89d', panelBg:'#081817', panelBorder:'#1d403b', controlHover:'#102825', highlight:'#34d399', highlightSoft:'rgba(52,211,153,0.16)', highlightBorder:'rgba(52,211,153,0.36)', land:'#112523', landHover:'#183733', labelBg:'rgba(4,20,18,0.74)', labelText:'#f0fffb' },
+  midnight: { family:'clean', group:'dark', label:'Midnight Rose', style:'modern', showNames:true, showBorders:false, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#090813', text:'#f1ecff', textDim:'#9b8fc2', panelBg:'#141020', panelBorder:'#33264d', controlHover:'#241a38', highlight:'#f472b6', highlightSoft:'rgba(244,114,182,0.17)', highlightBorder:'rgba(244,114,182,0.38)', land:'#1d1730', landHover:'#30214d', labelBg:'rgba(20,12,35,0.72)', labelText:'#ffffff' },
+  atlas: { family:'clean', group:'light', label:'Atlas Paper', style:'classic', showNames:true, showBorders:true, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#eef1e7', text:'#273126', textDim:'#6f7a68', panelBg:'#fbfbf3', panelBorder:'#d1d8c6', controlHover:'#edf0e4', highlight:'#b45309', highlightSoft:'rgba(180,83,9,0.16)', highlightBorder:'rgba(180,83,9,0.36)', land:'#dce4d2', landHover:'#c9d4bd', labelBg:'rgba(255,255,248,0.82)', labelText:'#2d2414' },
+  alpine: { family:'clean', group:'light', label:'Alpine Glass', style:'modern', showNames:true, showBorders:false, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#eaf7fb', text:'#15313b', textDim:'#5c7880', panelBg:'#f7fcff', panelBorder:'#c4dde7', controlHover:'#e3f2f7', highlight:'#0891b2', highlightSoft:'rgba(8,145,178,0.16)', highlightBorder:'rgba(8,145,178,0.36)', land:'#d5e9ef', landHover:'#bedce6', labelBg:'rgba(248,253,255,0.86)', labelText:'#0f3440' },
+  museum: { family:'clean', group:'light', label:'Museum Ink', style:'classic', showNames:false, showBorders:true, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#f7f4ec', text:'#1f2933', textDim:'#6b7280', panelBg:'#fffefa', panelBorder:'#d7d1c3', controlHover:'#efebe1', highlight:'#1f4f8f', highlightSoft:'rgba(31,79,143,0.14)', highlightBorder:'rgba(31,79,143,0.34)', land:'#e4dfd2', landHover:'#d5cdbd', labelBg:'rgba(255,254,250,0.9)', labelText:'#1f2933' },
+  linen: { family:'clean', group:'light', label:'Linen Slate', style:'classic', showNames:true, showBorders:true, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#f1f3f0', text:'#25313a', textDim:'#687782', panelBg:'#fcfcfa', panelBorder:'#ccd3d5', controlHover:'#e9eeee', highlight:'#0f766e', highlightSoft:'rgba(15,118,110,0.14)', highlightBorder:'rgba(15,118,110,0.32)', land:'#d9dfdc', landHover:'#c7d1ce', labelBg:'rgba(255,255,255,0.88)', labelText:'#1f2e34' },
+  daylight: { family:'clean', group:'light', label:'Daylight Signal', style:'futuristic', showNames:true, showBorders:false, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#f6fbff', text:'#18263a', textDim:'#66758c', panelBg:'#ffffff', panelBorder:'#d8e1ec', controlHover:'#eef5ff', highlight:'#2563eb', highlightSoft:'rgba(37,99,235,0.13)', highlightBorder:'rgba(37,99,235,0.32)', land:'#dde7f3', landHover:'#c9d8eb', labelBg:'rgba(255,255,255,0.9)', labelText:'#17223a' },
+  neon: { family:'poly', group:'dark', label:'Neon Vector', style:'all poly', showNames:true, showBorders:true, showFacets:true, showBgFacets:true, showLandFacets:true, densitySelected:14, contrastSelected:9, densityLand:5, contrastLand:1, densityBg:5, contrastBg:5, bg:'#03070d', text:'#dffcff', textDim:'#7aa2b2', panelBg:'#07131a', panelBorder:'#164050', controlHover:'#0d2d37', highlight:'#19f2ff', highlightSoft:'rgba(25,242,255,0.16)', highlightBorder:'rgba(25,242,255,0.42)', land:'#0d1c25', landHover:'#123546', labelBg:'rgba(0,17,25,0.72)', labelText:'#eaffff' },
+  violet: { family:'poly', group:'dark', label:'Violet Orbit', style:'selected + sea', showNames:true, showBorders:false, showFacets:true, showBgFacets:true, showLandFacets:false, densitySelected:16, contrastSelected:8, densityBg:6, contrastBg:4, bg:'#090813', text:'#f1ecff', textDim:'#9b8fc2', panelBg:'#141020', panelBorder:'#33264d', controlHover:'#241a38', highlight:'#c084fc', highlightSoft:'rgba(192,132,252,0.18)', highlightBorder:'rgba(192,132,252,0.42)', land:'#1d1730', landHover:'#30214d', labelBg:'rgba(20,12,35,0.72)', labelText:'#ffffff' },
+  cyberTeal: { family:'poly', group:'dark', label:'Cyber Teal', style:'selected only', showNames:true, showBorders:true, showFacets:true, showBgFacets:false, showLandFacets:false, densitySelected:20, contrastSelected:7, bg:'#031114', text:'#ddfbff', textDim:'#7ba9b0', panelBg:'#071b20', panelBorder:'#1d4b55', controlHover:'#0d2d34', highlight:'#22d3ee', highlightSoft:'rgba(34,211,238,0.16)', highlightBorder:'rgba(34,211,238,0.38)', land:'#10272e', landHover:'#173a43', labelBg:'rgba(4,20,24,0.74)', labelText:'#f1feff' },
+  magmaMesh: { family:'poly', group:'dark', label:'Magma Mesh', style:'default + selected', showNames:false, showBorders:true, showFacets:true, showBgFacets:false, showLandFacets:true, densitySelected:12, contrastSelected:10, densityLand:4, contrastLand:1, bg:'#120806', text:'#ffe8dd', textDim:'#b58c7d', panelBg:'#1d0f0b', panelBorder:'#4a271f', controlHover:'#301810', highlight:'#fb7185', highlightSoft:'rgba(251,113,133,0.16)', highlightBorder:'rgba(251,113,133,0.36)', land:'#2b1814', landHover:'#45241b', labelBg:'rgba(22,8,5,0.74)', labelText:'#fff2ec' },
+  nightGlass: { family:'poly', group:'dark', label:'Night Glass', style:'sea only', showNames:true, showBorders:true, showFacets:false, showBgFacets:true, showLandFacets:false, densityBg:8, contrastBg:3, bg:'#07101b', text:'#e9f2ff', textDim:'#8da1ba', panelBg:'#0e1724', panelBorder:'#27394e', controlHover:'#18273a', highlight:'#a3e635', highlightSoft:'rgba(163,230,53,0.15)', highlightBorder:'rgba(163,230,53,0.35)', land:'#172538', landHover:'#233750', labelBg:'rgba(6,16,28,0.74)', labelText:'#faffef' },
+  solar: { family:'poly', group:'light', label:'Solar Desk', style:'selected + sea', showNames:true, showBorders:true, showFacets:true, showBgFacets:true, showLandFacets:false, densitySelected:12, contrastSelected:8, densityBg:4, contrastBg:3, bg:'#fff7df', text:'#302415', textDim:'#85715b', panelBg:'#fffaf0', panelBorder:'#ead9b8', controlHover:'#f5ead1', highlight:'#e11d48', highlightSoft:'rgba(225,29,72,0.14)', highlightBorder:'rgba(225,29,72,0.32)', land:'#efe1c5', landHover:'#e6d0a9', labelBg:'rgba(255,250,240,0.88)', labelText:'#3b1b1d' },
+  prism: { family:'poly', group:'light', label:'Prism Lab', style:'all poly', showNames:true, showBorders:false, showFacets:true, showBgFacets:true, showLandFacets:true, densitySelected:18, contrastSelected:7, densityLand:5, contrastLand:1, densityBg:5, contrastBg:4, bg:'#f3f7ff', text:'#162033', textDim:'#65728a', panelBg:'#ffffff', panelBorder:'#d6def0', controlHover:'#edf3ff', highlight:'#7c3aed', highlightSoft:'rgba(124,58,237,0.14)', highlightBorder:'rgba(124,58,237,0.34)', land:'#dfe8fb', landHover:'#cbd8f4', labelBg:'rgba(255,255,255,0.88)', labelText:'#20123d' },
+  citrusFold: { family:'poly', group:'light', label:'Citrus Fold', style:'default + selected', showNames:true, showBorders:true, showFacets:true, showBgFacets:false, showLandFacets:true, densitySelected:14, contrastSelected:7, densityLand:4, contrastLand:1, bg:'#fffbed', text:'#31270f', textDim:'#83734d', panelBg:'#fffef7', panelBorder:'#eadfba', controlHover:'#f6efcf', highlight:'#ca8a04', highlightSoft:'rgba(202,138,4,0.15)', highlightBorder:'rgba(202,138,4,0.35)', land:'#eee5bf', landHover:'#dfd194', labelBg:'rgba(255,254,247,0.9)', labelText:'#3b2e10' },
+  oceanFold: { family:'poly', group:'light', label:'Ocean Fold', style:'sea only', showNames:true, showBorders:false, showFacets:false, showBgFacets:true, showLandFacets:false, densityBg:7, contrastBg:5, bg:'#e7f8ff', text:'#15323e', textDim:'#5f7b86', panelBg:'#f8fdff', panelBorder:'#c8e0e9', controlHover:'#e4f3f8', highlight:'#0284c7', highlightSoft:'rgba(2,132,199,0.14)', highlightBorder:'rgba(2,132,199,0.34)', land:'#d3e7ed', landHover:'#bbd8e2', labelBg:'rgba(248,253,255,0.9)', labelText:'#123545' },
+  mintCircuit: { family:'poly', group:'light', label:'Mint Circuit', style:'all poly', showNames:true, showBorders:true, showFacets:true, showBgFacets:true, showLandFacets:true, densitySelected:16, contrastSelected:7, densityLand:5, contrastLand:1, densityBg:6, contrastBg:3, bg:'#effff9', text:'#10342b', textDim:'#5f8177', panelBg:'#fbfffd', panelBorder:'#cce4dc', controlHover:'#e3f5ef', highlight:'#059669', highlightSoft:'rgba(5,150,105,0.14)', highlightBorder:'rgba(5,150,105,0.34)', land:'#d9efe6', landHover:'#c2ded2', labelBg:'rgba(251,255,253,0.9)', labelText:'#0f3328' }
+};
+let currentTheme = 'ember';
+let themeFamilyFilter = 'clean';
+
+// Path cache: id -> Path2D (for accurate hit testing)
+let pathCache = {};
+
+const canvas = document.getElementById('map-canvas');
+const ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+
+// ── TOPOJSON DECODE ──
+function decodeTopo(topo) {
+  const obj = topo.objects.countries;
+  const arcs = topo.arcs;
+  const tf = topo.transform;
+
+  function decodeArc(idx) {
+    const arc = arcs[idx < 0 ? ~idx : idx];
+    const out = []; let x=0, y=0;
+    for (const [dx,dy] of arc) {
+      x+=dx; y+=dy;
+      out.push([x*tf.scale[0]+tf.translate[0], y*tf.scale[1]+tf.translate[1]]);
+    }
+    if (idx < 0) out.reverse();
+    return out;
+  }
+
+  function ring(indices) {
+    let c = [];
+    for (const i of indices) c = c.concat(decodeArc(i));
+    return c;
+  }
+
+  const features = [];
+  const geoms = obj.type==='GeometryCollection' ? obj.geometries : [obj];
+  for (const g of geoms) {
+    const db = COUNTRIES_DB[g.id];
+    if (!db) continue;
+    let polys = [];
+    if (g.type==='Polygon') polys = [g.arcs.map(ring)];
+    else if (g.type==='MultiPolygon') polys = g.arcs.map(p => p.map(ring));
+    if (!polys.length) continue;
+
+    let minLon=Infinity,maxLon=-Infinity,minLat=Infinity,maxLat=-Infinity;
+    for (const p of polys) for (const r of p) for (const [lo,la] of r) {
+      if(lo<minLon)minLon=lo; if(lo>maxLon)maxLon=lo;
+      if(la<minLat)minLat=la; if(la>maxLat)maxLat=la;
+    }
+    features.push({ ...db, id:g.id, polys, bbox:{minLon,maxLon,minLat,maxLat} });
+  }
+  return features;
+}
+
+// ── PROJECTION ──
+function project(lon, lat) {
+  const x = (lon+180)/360;
+  const r = Math.max(-1.48, Math.min(1.48, lat*Math.PI/180));
+  const y = 0.5 - Math.log(Math.tan(Math.PI/4+r/2))/(2*Math.PI);
+  return [x,y];
+}
+
+// lonOffset: -1 (left tile), 0 (center), +1 (right tile)
+function toScreen(lon, lat, w, h, lonOffset=0) {
+  const [px,py] = project(lon, lat);
+  const base = Math.min(w, h*2) * 1.02;
+  const x = (px - 0.5)*base + lonOffset*base*MAP_REPEAT_SPACING + w/2;
+  const y = (py-0.5)*base + h/2;
+  return [x*transform.scale+transform.x, y*transform.scale+transform.y];
+}
+
+// ── NORMALIZE RING LONGITUDES ──
+// Unwraps the ring so consecutive points never jump > 180°.
+// anchorLon: target center longitude for this tile (0 for center, -360 for left, +360 for right)
+// This keeps every polygon in one continuous piece without crossing the tile boundary.
+function normalizeRing(ring, anchorLon=0) {
+  if (ring.length < 2) return ring;
+  // First point: shift into [anchorLon-180, anchorLon+180]
+  let lon0 = ring[0][0];
+  while (lon0 > anchorLon + 180) lon0 -= 360;
+  while (lon0 < anchorLon - 180) lon0 += 360;
+  const out = [[lon0, ring[0][1]]];
+  for (let i = 1; i < ring.length; i++) {
+    let lon = ring[i][0];
+    const prev = out[i-1][0];
+    while (lon - prev > 180)  lon -= 360;
+    while (lon - prev < -180) lon += 360;
+    out.push([lon, ring[i][1]]);
+  }
+  return out;
+}
+
+// ── BUILD PATH2D for hit testing (tiled) ──
+function buildScreenPath(polys, w, h, lonOffset=0) {
+  const path = new Path2D();
+  const anchorLon = lonOffset * 360;
+  for (const poly of polys) {
+    for (const ring of poly) {
+      const norm = normalizeRing(ring, anchorLon);
+      let first = true;
+      for (const [lo,la] of norm) {
+        const [sx,sy] = toScreen(lo, la, w, h, lonOffset);
+        if (first) { path.moveTo(sx, sy); first=false; }
+        else path.lineTo(sx, sy);
+      }
+      path.closePath();
+    }
+  }
+  return path;
+}
+
+function seededRandom(seed) {
+  let n = seed;
+  return () => {
+    n = (n * 1664525 + 1013904223) >>> 0;
+    return n / 4294967296;
+  };
+}
+
+function hashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function hexToRgb(hex) {
+  const clean = hex.replace('#', '');
+  return [
+    parseInt(clean.slice(0, 2), 16),
+    parseInt(clean.slice(2, 4), 16),
+    parseInt(clean.slice(4, 6), 16)
+  ];
+}
+
+function shadeHex(hex, amount) {
+  const rgb = hexToRgb(hex).map(v => Math.max(0, Math.min(255, Math.round(v + amount))));
+  return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+}
+
+function mixHex(a, b, t) {
+  const ar = hexToRgb(a), br = hexToRgb(b);
+  const rgb = ar.map((v, i) => Math.round(v + (br[i] - v) * t));
+  return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+}
+
+function makeGradientFill(w, h, fallbackColor) {
+  const rad = gradientAngle * Math.PI / 180;
+  const cx = w / 2, cy = h / 2;
+  const len = Math.hypot(w, h) / 2;
+  const x0 = cx - Math.cos(rad) * len;
+  const y0 = cy - Math.sin(rad) * len;
+  const x1 = cx + Math.cos(rad) * len;
+  const y1 = cy + Math.sin(rad) * len;
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  const mix = gradientMix / 10;
+  g.addColorStop(0, mixHex(fallbackColor, gradientColorA, mix));
+  g.addColorStop(1, mixHex(fallbackColor, gradientColorB, mix));
+  return g;
+}
+
+function getRegionColor(c, isHL) {
+  if (isHL) return colorSelected;
+  return colorLand;
+}
+
+function drawFacetFill(c, norm, w, h, lonOffset, isHL) {
+  const pts = norm.map(([lo, la]) => toScreen(lo, la, w, h, lonOffset));
+  let left=Infinity, right=-Infinity, top=Infinity, bottom=-Infinity;
+  for (const [x,y] of pts) {
+    if (x < left) left = x; if (x > right) right = x;
+    if (y < top) top = y; if (y > bottom) bottom = y;
+  }
+  if (right-left < 3 || bottom-top < 3) return;
+
+  const rnd = seededRandom(hashString(c.id + ':' + lonOffset + ':' + Math.round(transform.scale * 10)));
+  const base = getRegionColor(c, isHL);
+  const density = isHL ? densitySelected : densityLand;
+  const facetSize = isHL ? Math.max(10, 82 - density * 3.6) : Math.max(18, 100 - density * 7);
+  const maxFacets = isHL ? Math.max(8, density + 12) : Math.max(5, density + 5);
+  const minFacets = isHL ? 3 : 2;
+  const cols = Math.max(minFacets, Math.min(maxFacets, Math.ceil((right-left) / facetSize)));
+  const rows = Math.max(minFacets, Math.min(maxFacets, Math.ceil((bottom-top) / facetSize)));
+  const points = [];
+
+  for (let y = 0; y <= rows; y++) {
+    for (let x = 0; x <= cols; x++) {
+      const jitterX = x > 0 && x < cols ? (rnd() - 0.5) * (right-left) / cols * 0.55 : 0;
+      const jitterY = y > 0 && y < rows ? (rnd() - 0.5) * (bottom-top) / rows * 0.55 : 0;
+      points.push([
+        left + (right-left) * x / cols + jitterX,
+        top + (bottom-top) * y / rows + jitterY
+      ]);
+    }
+  }
+
+  ctx.save();
+  ctx.clip();
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = y * (cols + 1) + x;
+      const p0 = points[i], p1 = points[i + 1], p2 = points[i + cols + 1], p3 = points[i + cols + 2];
+      const tris = rnd() > 0.5 ? [[p0,p1,p2], [p1,p3,p2]] : [[p0,p1,p3], [p0,p3,p2]];
+      for (const tri of tris) {
+        ctx.beginPath();
+        ctx.moveTo(tri[0][0], tri[0][1]);
+        ctx.lineTo(tri[1][0], tri[1][1]);
+        ctx.lineTo(tri[2][0], tri[2][1]);
+        ctx.closePath();
+        const contrastLevel = isHL ? contrastSelected : contrastLand;
+        const contrastBase = isHL ? contrastLevel * 3 + 4 : contrastLevel * 0.6;
+        const contrastRange = isHL ? contrastLevel * 8 + 6 : contrastLevel * 1.8;
+        const contrast = (rnd() > 0.5 ? 1 : -1) * (contrastBase + rnd() * contrastRange);
+        ctx.fillStyle = shadeHex(base, Math.round(contrast));
+        ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawBackgroundFacets(w, h) {
+  const rnd = seededRandom(hashString(colorBg + ':' + w + ':' + h));
+  const cell = Math.max(45, Math.min(150, 168 - densityBg * 13));
+  const cols = Math.ceil(w / cell) + 1;
+  const rows = Math.ceil(h / cell) + 1;
+  const points = [];
+
+  for (let y = 0; y <= rows; y++) {
+    for (let x = 0; x <= cols; x++) {
+      const jitterX = x > 0 && x < cols ? (rnd() - 0.5) * cell * 0.65 : 0;
+      const jitterY = y > 0 && y < rows ? (rnd() - 0.5) * cell * 0.65 : 0;
+      points.push([x * cell + jitterX, y * cell + jitterY]);
+    }
+  }
+
+  ctx.fillStyle = colorBg;
+  ctx.fillRect(0, 0, w, h);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = y * (cols + 1) + x;
+      const p0 = points[i], p1 = points[i + 1], p2 = points[i + cols + 1], p3 = points[i + cols + 2];
+      const tris = rnd() > 0.5 ? [[p0,p1,p2], [p1,p3,p2]] : [[p0,p1,p3], [p0,p3,p2]];
+      for (const tri of tris) {
+        ctx.beginPath();
+        ctx.moveTo(tri[0][0], tri[0][1]);
+        ctx.lineTo(tri[1][0], tri[1][1]);
+        ctx.lineTo(tri[2][0], tri[2][1]);
+        ctx.closePath();
+        const contrast = (rnd() > 0.5 ? 1 : -1) * (contrastBg * 2 + 2 + rnd() * (contrastBg * 5 + 4));
+        ctx.fillStyle = shadeHex(colorBg, Math.round(contrast));
+        ctx.fill();
+      }
+    }
+  }
+
+  const glow = ctx.createRadialGradient(w * 0.5, h * 0.45, Math.min(w,h)*0.12, w * 0.5, h * 0.5, Math.max(w,h)*0.72);
+  glow.addColorStop(0, 'rgba(255,255,255,0.08)');
+  glow.addColorStop(1, 'rgba(0,0,0,0.22)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, w, h);
+}
+
+function drawNeonStroke(isHL) {
+  const selectedBoost = isHL ? 1.45 : 1;
+  const alpha = Math.min(1, (0.28 + neonIntensity * 0.065) * selectedBoost);
+  const width = Math.max(0.7, neonWidth / Math.max(0.8, transform.scale * 0.35)) * selectedBoost;
+  ctx.save();
+  ctx.lineJoin='round';
+  ctx.lineCap='round';
+  ctx.shadowColor=neonColor;
+  ctx.shadowBlur=neonBlur + neonIntensity * 2;
+  ctx.strokeStyle=neonColor + Math.round(alpha * 255).toString(16).padStart(2, '0');
+  ctx.lineWidth=width * 1.7;
+  ctx.stroke();
+  ctx.shadowBlur=Math.max(2, neonBlur * 0.45);
+  ctx.strokeStyle=neonColor;
+  ctx.lineWidth=Math.max(0.5, width * (isHL ? 0.95 : 0.7));
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawNeonCountry(c, w, h, lonOffset, isHL) {
+  const [bx0,by0]=toScreen(c.bbox.minLon,c.bbox.maxLat,w,h,lonOffset);
+  const [bx1,by1]=toScreen(c.bbox.maxLon,c.bbox.minLat,w,h,lonOffset);
+  if(Math.min(bx0,bx1)>w+2||Math.max(bx0,bx1)<-2||Math.min(by0,by1)>h+2||Math.max(by0,by1)<-2) return;
+
+  const anchorLon = lonOffset * 360;
+  for (const poly of c.polys) {
+    for (const ring of poly) {
+      const norm = normalizeRing(ring, anchorLon);
+      ctx.beginPath();
+      let first=true;
+      for (const [lo,la] of norm) {
+        const [sx,sy]=toScreen(lo,la,w,h,lonOffset);
+        if(first){ctx.moveTo(sx,sy);first=false;}else ctx.lineTo(sx,sy);
+      }
+      ctx.closePath();
+      drawNeonStroke(isHL);
+    }
+  }
+}
+
+// ── FIT TO SELECTION ──
+function fitToSelection(anim=true) {
+  const sel = allCountries.filter(c => highlighted.has(c.name));
+  if (!sel.length) return;
+  let minLon=Infinity,maxLon=-Infinity,minLat=Infinity,maxLat=-Infinity;
+  for (const c of sel) {
+    if(c.bbox.minLon<minLon)minLon=c.bbox.minLon;
+    if(c.bbox.maxLon>maxLon)maxLon=c.bbox.maxLon;
+    if(c.bbox.minLat<minLat)minLat=c.bbox.minLat;
+    if(c.bbox.maxLat>maxLat)maxLat=c.bbox.maxLat;
+  }
+  const padLon=(maxLon-minLon)*0.18+3, padLat=(maxLat-minLat)*0.18+3;
+  minLon-=padLon; maxLon+=padLon; minLat-=padLat; maxLat+=padLat;
+
+  const w=canvas.clientWidth, h=canvas.clientHeight;
+  const base=Math.min(w,h*2)*1.02;
+
+  const [px0,py0]=project(minLon,maxLat);
+  const [px1,py1]=project(maxLon,minLat);
+  const sx0=(px0-0.5)*base+w/2, sy0=(py0-0.5)*base+h/2;
+  const sx1=(px1-0.5)*base+w/2, sy1=(py1-0.5)*base+h/2;
+  const bw=sx1-sx0, bh=sy1-sy0;
+
+  const newScale=Math.max(0.3,Math.min(20,Math.min(w/bw,h/bh)*0.95));
+  const cx=(sx0+sx1)/2, cy=(sy0+sy1)/2;
+  const newX=w/2-cx*newScale, newY=h/2-cy*newScale;
+
+  if (anim && !animating) {
+    const s0={...transform}, s1={x:newX,y:newY,scale:newScale};
+    const dur=550, t0=performance.now();
+    animating=true;
+    const step=now=>{
+      let p=Math.min(1,(now-t0)/dur);
+      p=p<0.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+      transform.x=s0.x+(s1.x-s0.x)*p;
+      transform.y=s0.y+(s1.y-s0.y)*p;
+      transform.scale=s0.scale+(s1.scale-s0.scale)*p;
+      render();
+      if(p<1)requestAnimationFrame(step); else animating=false;
+    };
+    requestAnimationFrame(step);
+  } else {
+    transform={x:newX,y:newY,scale:newScale};
+    render();
+  }
+}
+
+// ── DRAW ONE COUNTRY for one tile offset ──
+function drawCountry(c, w, h, lonOffset, isHL, isHov) {
+  // bbox cull for this tile
+  const [bx0,by0]=toScreen(c.bbox.minLon,c.bbox.maxLat,w,h,lonOffset);
+  const [bx1,by1]=toScreen(c.bbox.maxLon,c.bbox.minLat,w,h,lonOffset);
+  if(Math.min(bx0,bx1)>w+2||Math.max(bx0,bx1)<-2||Math.min(by0,by1)>h+2||Math.max(by0,by1)<-2) return;
+
+  const anchorLon = lonOffset * 360; // center tile=0, left=-360, right=360
+
+  for (const poly of c.polys) {
+    for (const ring of poly) {
+      const norm = normalizeRing(ring, anchorLon);
+      ctx.beginPath();
+      let first=true;
+      for (const [lo,la] of norm) {
+        const [sx,sy]=toScreen(lo,la,w,h,lonOffset);
+        if(first){ctx.moveTo(sx,sy);first=false;}else ctx.lineTo(sx,sy);
+      }
+      ctx.closePath();
+
+      if (showHoverHighlight && isHov) {
+        ctx.save();
+        ctx.shadowColor=colorSelected+'66';
+        ctx.shadowBlur=14;
+        ctx.fillStyle=isHL ? colorSelected+'f2' : colorLandHover;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      if ((showFacets && isHL) || (showLandFacets && !isHL)) {
+        ctx.save();
+        ctx.shadowColor='rgba(0,0,0,0.28)';
+        ctx.shadowBlur=10;
+        ctx.shadowOffsetY=4;
+        ctx.fillStyle=(showGradient && (gradientScope === 'all' || isHL)) ? makeGradientFill(w, h, getRegionColor(c, isHL)) : getRegionColor(c, isHL);
+        ctx.fill();
+        ctx.restore();
+        drawFacetFill(c, norm, w, h, lonOffset, isHL);
+        if (showBorders || (showHoverHighlight && isHov)) {
+          ctx.strokeStyle=(showHoverHighlight && isHov) ? colorSelected : colorBorder;
+          ctx.lineWidth=Math.max(0.15, 0.32/transform.scale*3);
+          ctx.stroke();
+        }
+      } else if (isHL) {
+        ctx.fillStyle=(showGradient && (gradientScope === 'all' || isHL)) ? makeGradientFill(w, h, colorSelected) : ((showHoverHighlight && isHov) ? colorSelected+'f2' : colorSelected+'cc');
+        ctx.fill();
+        if (showBorders) {
+          ctx.strokeStyle=(showHoverHighlight && isHov) ? colorSelected : colorSelected+'aa';
+          ctx.lineWidth=Math.max(0.4, 0.8/transform.scale*3);
+          ctx.stroke();
+        }
+      } else {
+        ctx.fillStyle=(showGradient && gradientScope === 'all') ? makeGradientFill(w, h, colorLand) : ((showHoverHighlight && isHov)?colorLandHover:colorLand);
+        ctx.fill();
+        if (showBorders) {
+          ctx.strokeStyle=(showHoverHighlight && isHov)?colorSelected:colorBorder;
+          ctx.lineWidth=Math.max(0.15, 0.35/transform.scale*3);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+}
+
+// ── RENDER ──
+function render() {
+  const dpr=window.devicePixelRatio||1;
+  const w=canvas.clientWidth, h=canvas.clientHeight;
+  canvas.width=w*dpr; canvas.height=h*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  // Sea
+  if (showBgFacets) {
+    drawBackgroundFacets(w, h);
+  } else {
+    ctx.fillStyle = colorBg;
+    ctx.fillRect(0,0,w,h);
+  }
+
+  const sorted=[...allCountries].sort((a,b)=>{
+    const pa=highlighted.has(a.name)?2:1, pb=highlighted.has(b.name)?2:1;
+    return pa-pb;
+  });
+
+  // Render 3 tiles: left(-1), center(0), right(+1)
+  // Only render tiles that are potentially visible
+  const base = Math.min(w, h*2) * 1.02;
+  const tileW = base * transform.scale;
+  const tileStep = tileW * MAP_REPEAT_SPACING;
+
+  for (const offset of [-1, 0, 1]) {
+    // Rough tile visibility check
+    const tileLeft  = offset * tileStep - tileW/2 + w/2 + transform.x;
+    const tileRight = offset * tileStep + tileW/2 + w/2 + transform.x;
+    if (tileRight < -10 || tileLeft > w + 10) continue;
+
+    // Draw ALL countries in this tile
+    for (const c of sorted) {
+      drawCountry(c, w, h, offset, highlighted.has(c.name), hovered===c.name);
+    }
+
+    // Glow pass for highlighted outlines
+    ctx.save();
+    ctx.shadowColor=colorSelected+'44'; ctx.shadowBlur=12;
+    for (const c of sorted) {
+      if (!highlighted.has(c.name)) continue;
+      const [bx0,by0]=toScreen(c.bbox.minLon,c.bbox.maxLat,w,h,offset);
+      const [bx1,by1]=toScreen(c.bbox.maxLon,c.bbox.minLat,w,h,offset);
+      if(Math.min(bx0,bx1)>w||Math.max(bx0,bx1)<0||Math.min(by0,by1)>h||Math.max(by0,by1)<0) continue;
+      ctx.strokeStyle=colorSelected+'88';
+      ctx.lineWidth=Math.max(0.6, 1.2/transform.scale*3);
+      const anchorGlow = offset * 360;
+      for (const poly of c.polys) for (const ring of poly) {
+        const norm=normalizeRing(ring, anchorGlow);
+        ctx.beginPath(); let f=true;
+        for(const[lo,la]of norm){const[sx,sy]=toScreen(lo,la,w,h,offset);if(f){ctx.moveTo(sx,sy);f=false;}else ctx.lineTo(sx,sy);}
+        ctx.closePath(); ctx.stroke();
+      }
+    }
+    ctx.restore();
+
+    if (showNeon) {
+      for (const c of sorted) {
+        const isHL = highlighted.has(c.name);
+        if (neonScope === 'selected' && !isHL) continue;
+        drawNeonCountry(c, w, h, offset, isHL);
+      }
+    }
+  }
+
+  // Labels for highlighted
+  const fontSize=Math.max(7,Math.min(13,10*transform.scale*0.45));
+  if (showNames && fontSize>=7) {
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font=`600 ${fontSize}px 'DM Sans',sans-serif`;
+    for (const c of sorted) {
+      if (!highlighted.has(c.name)) continue;
+      const lc=getLabelCenter(c);
+      // Try center tile first, then side tiles
+      for (const off of [0, -1, 1]) {
+        const [sx,sy]=toScreen(lc[0],lc[1],w,h,off);
+        if(sx<-20||sx>w+20||sy<-20||sy>h+20) continue;
+        const txt=c.name.toUpperCase();
+        const tw=ctx.measureText(txt).width;
+        ctx.fillStyle=colorLabelBg;
+        ctx.fillRect(sx-tw/2-4,sy-fontSize/2-2,tw+8,fontSize+5);
+        ctx.fillStyle=colorLabelText;
+        ctx.fillText(txt,sx,sy);
+        break; // only draw once
+      }
+    }
+  }
+}
+
+function getLabelCenter(c) {
+  // Override for large/awkward countries
+  const overrides={
+    'Russia':[50,58],'France':[2.5,46.5],'Norway':[10,64],
+    'Italy':[12.5,42.5],'Greece':[22,39],'United Kingdom':[-2,54],
+    'United States':[-100,40],'Canada':[-96,60],'Australia':[134,-25],
+    'Brazil':[-52,-10],'China':[104,35],'India':[80,22],
+    'Argentina':[-64,-35],'Kazakhstan':[66,48],'Algeria':[3,28],
+    'South Africa':[25,-29],'Indonesia':[118,-2],'Mexico':[-102,24],
+  };
+  if (overrides[c.name]) return overrides[c.name];
+  return [(c.bbox.minLon+c.bbox.maxLon)/2,(c.bbox.minLat+c.bbox.maxLat)/2];
+}
+
+// ── HIT TEST with canvas isPointInPath, tiled ──
+function hitTest(mx,my) {
+  const w=canvas.clientWidth, h=canvas.clientHeight;
+
+  const sorted=[...allCountries].sort((a,b)=>{
+    const pa=highlighted.has(a.name)?2:1, pb=highlighted.has(b.name)?2:1;
+    return pb-pa;
+  });
+
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  for (const c of sorted) {
+    for (const offset of [0, -1, 1]) {
+      const[bx0,by0]=toScreen(c.bbox.minLon,c.bbox.maxLat,w,h,offset);
+      const[bx1,by1]=toScreen(c.bbox.maxLon,c.bbox.minLat,w,h,offset);
+      const left=Math.min(bx0,bx1)-2, right=Math.max(bx0,bx1)+2;
+      const top=Math.min(by0,by1)-2, bottom=Math.max(by0,by1)+2;
+      if(mx<left||mx>right||my<top||my>bottom) continue;
+      const path=buildScreenPath(c.polys,w,h,offset);
+      if(ctx.isPointInPath(path,mx,my)) {
+        ctx.restore();
+        return c.name;
+      }
+    }
+  }
+  ctx.restore();
+  return null;
+}
+
+// ── INTERACTION ──
+canvas.addEventListener('mousemove', e=>{
+  if(dragging){
+    transform.x=transformStart.x+(e.clientX-dragStart.x);
+    transform.y=transformStart.y+(e.clientY-dragStart.y);
+    render(); return;
+  }
+  if (!showHoverHighlight) {
+    if (hovered) {
+      hovered=null;
+      tooltip.style.opacity='0';
+      render();
+    }
+    canvas.style.cursor='grab';
+    return;
+  }
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const hit=hitTest(mx,my);
+  if(hit!==hovered){hovered=hit;canvas.style.cursor=hit?'pointer':'grab';render();}
+  if(hit){
+    const isHL=highlighted.has(hit);
+    const db=COUNTRIES_DB[Object.keys(COUNTRIES_DB).find(k=>COUNTRIES_DB[k].name===hit)]||{};
+    tooltip.innerHTML=`${db.flag||''} ${hit}`;
+    tooltip.className='tooltip'+(isHL?' hl':'');
+    tooltip.style.opacity='1';
+    tooltip.style.left=(e.clientX+14)+'px';
+    tooltip.style.top=(e.clientY-10)+'px';
+  } else { tooltip.style.opacity='0'; }
+});
+
+canvas.addEventListener('mousedown',e=>{
+  dragging=true; dragStart={x:e.clientX,y:e.clientY}; transformStart={...transform};
+  canvas.style.cursor='grabbing';
+});
+window.addEventListener('mouseup',()=>{dragging=false;canvas.style.cursor=(showHoverHighlight&&hovered)?'pointer':'grab';});
+
+canvas.addEventListener('click',e=>{
+  if (!showHoverHighlight) return;
+  if(Math.abs(e.clientX-dragStart.x)>5||Math.abs(e.clientY-dragStart.y)>5)return;
+  const rect=canvas.getBoundingClientRect();
+  const hit=hitTest(e.clientX-rect.left,e.clientY-rect.top);
+  if(hit)toggleCountry(hit);
+});
+
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const f=e.deltaY<0?1.15:1/1.15;
+  const ns=Math.max(0.25,Math.min(25,transform.scale*f)), r=ns/transform.scale;
+  transform.x=mx-(mx-transform.x)*r;
+  transform.y=my-(my-transform.y)*r;
+  transform.scale=ns; render();
+},{passive:false});
+
+canvas.addEventListener('mouseleave',()=>{tooltip.style.opacity='0';hovered=null;render();});
+
+document.getElementById('zoomIn').addEventListener('click',()=>zoom(1.3));
+document.getElementById('zoomOut').addEventListener('click',()=>zoom(1/1.3));
+document.getElementById('fitBtn').addEventListener('click',()=>fitToSelection());
+function zoom(f){
+  const w=canvas.clientWidth/2,h=canvas.clientHeight/2;
+  const ns=Math.max(0.25,Math.min(25,transform.scale*f)),r=ns/transform.scale;
+  transform.x=w-(w-transform.x)*r; transform.y=h-(h-transform.y)*r; transform.scale=ns; render();
+}
+
+// ── TOGGLE ──
+function toggleCountry(name){
+  if(highlighted.has(name))highlighted.delete(name); else highlighted.add(name);
+  render(); updateSelectedList(); updateDropdownList();
+  if(highlighted.size>0) fitToSelection();
+}
+
+// ── CONTINENT BUTTONS ──
+const REGIONS = ['Europe','Asia','Africa','Americas','Oceania'];
+
+function getCountriesInRegion(region){
+  return Object.values(COUNTRIES_DB).filter(c=>c.region===region);
+}
+
+function buildContinentBtns(){
+  const el=document.getElementById('continentBtns');
+  el.innerHTML=REGIONS.map(r=>{
+    const cs=getCountriesInRegion(r);
+    const full=cs.every(c=>highlighted.has(c.name));
+    const partial=!full&&cs.some(c=>highlighted.has(c.name));
+    const cls=full?'active':partial?'partial':'';
+    return `<button class="continent-btn ${cls}" data-region="${r}">${r}</button>`;
+  }).join('');
+  el.querySelectorAll('.continent-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const region=btn.dataset.region;
+      const cs=getCountriesInRegion(region);
+      const full=cs.every(c=>highlighted.has(c.name));
+      if(full){ cs.forEach(c=>highlighted.delete(c.name)); }
+      else { cs.forEach(c=>highlighted.add(c.name)); }
+      render(); updateSelectedList(); updateDropdownList();
+      if(highlighted.size) fitToSelection();
+    });
+  });
+}
+
+// ── DROPDOWN ──
+function getFilteredCountries(){
+  const q=document.getElementById('searchInput').value.toLowerCase().trim();
+  return Object.values(COUNTRIES_DB)
+    .filter(c=>!q||c.name.toLowerCase().includes(q))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+}
+
+function updateDropdownList(){
+  buildContinentBtns();
+  const listEl=document.getElementById('dropdownList');
+  const filtered=getFilteredCountries();
+  listEl.innerHTML=filtered.map(c=>{
+    const sel=highlighted.has(c.name);
+    return `<div class="dropdown-item ${sel?'selected':''}" data-name="${c.name}">
+      <div class="check"></div>
+      <span class="flag">${c.flag||''}</span>
+      <span class="cname">${c.name}</span>
+    </div>`;
+  }).join('');
+  listEl.querySelectorAll('.dropdown-item').forEach(item=>{
+    item.addEventListener('click',()=>toggleCountry(item.dataset.name));
+  });
+}
+
+function updateSelectedList(){
+  const list=document.getElementById('selectedList');
+  const sorted=[...highlighted].sort();
+  if(!sorted.length){
+    list.innerHTML='<span class="empty-msg">Click the map or use Select to pick countries</span>';
+  } else {
+    list.innerHTML=sorted.map(n=>{
+      const db=Object.values(COUNTRIES_DB).find(c=>c.name===n)||{};
+      return `<span class="selected-tag" data-name="${n}">${db.flag||''} ${n}<span class="x">✕</span></span>`;
+    }).join('');
+    list.querySelectorAll('.selected-tag').forEach(t=>{
+      t.addEventListener('click',()=>toggleCountry(t.dataset.name));
+    });
+  }
+}
+
+// open/close
+function openDropdown(){
+  closeOptions();
+  closeSourcePanel();
+  document.getElementById('dropdownPanel').classList.add('open');
+  document.getElementById('dropdownOverlay').classList.add('open');
+  document.getElementById('searchInput').value='';
+  updateDropdownList();
+  setTimeout(()=>document.getElementById('searchInput').focus(),50);
+}
+function closeDropdown(){
+  document.getElementById('dropdownPanel').classList.remove('open');
+  document.getElementById('dropdownOverlay').classList.remove('open');
+}
+document.getElementById('selectBtn').addEventListener('click',openDropdown);
+document.getElementById('dropdownClose').addEventListener('click',closeDropdown);
+document.getElementById('dropdownOverlay').addEventListener('click',()=>{
+  closeDropdown();
+  closeOptions();
+  closeSourcePanel();
+});
+document.getElementById('searchInput').addEventListener('input',updateDropdownList);
+
+document.getElementById('actionDeselectAll').addEventListener('click',()=>{
+  highlighted.clear();render();updateSelectedList();updateDropdownList();
+});
+
+// ── OPTIONS PANEL ──
+function setCssVar(name, value) {
+  document.documentElement.style.setProperty(name, value);
+}
+
+function applyTheme(key, shouldRender=true) {
+  const theme = THEMES[key];
+  if (!theme) return;
+  currentTheme = key;
+  showNames = theme.showNames;
+  showBorders = theme.showBorders;
+  showHoverHighlight = theme.showHoverHighlight ?? false;
+  showNeon = theme.showNeon ?? false;
+  neonScope = theme.neonScope ?? (theme.neonSelectedOnly === false ? 'all' : 'selected');
+  neonColor = theme.neonColor ?? '#7CFF3A';
+  neonIntensity = theme.neonIntensity ?? 6;
+  neonBlur = theme.neonBlur ?? 12;
+  neonWidth = theme.neonWidth ?? 3;
+  showGradient = theme.showGradient ?? false;
+  gradientScope = theme.gradientScope ?? 'selected';
+  gradientColorA = theme.gradientColorA ?? '#38bdf8';
+  gradientColorB = theme.gradientColorB ?? '#f472b6';
+  gradientAngle = theme.gradientAngle ?? 45;
+  gradientMix = theme.gradientMix ?? 8;
+  showFacets = theme.showFacets;
+  showBgFacets = theme.showBgFacets;
+  showLandFacets = theme.showLandFacets;
+  densitySelected = theme.densitySelected ?? 6;
+  contrastSelected = theme.contrastSelected ?? 10;
+  densityLand = theme.densityLand ?? 4;
+  contrastLand = theme.contrastLand ?? 1;
+  densityBg = theme.densityBg ?? 4;
+  contrastBg = theme.contrastBg ?? 4;
+  colorBg = theme.bg;
+  colorBorder = theme.panelBorder;
+  colorSelected = theme.highlight;
+  colorLand = theme.land;
+  colorLandHover = theme.landHover;
+  colorLabelBg = theme.labelBg;
+  colorLabelText = theme.labelText;
+
+  setCssVar('--bg', theme.bg);
+  setCssVar('--text', theme.text);
+  setCssVar('--text-dim', theme.textDim);
+  setCssVar('--highlight', theme.highlight);
+  setCssVar('--highlight-soft', theme.highlightSoft);
+  setCssVar('--highlight-border', theme.highlightBorder);
+  setCssVar('--panel-bg', theme.panelBg);
+  setCssVar('--panel-border', theme.panelBorder);
+  setCssVar('--control-hover', theme.controlHover);
+
+  syncOptionControls();
+  syncThemeButtons();
+  if (shouldRender) render();
+}
+
+function syncOptionControls() {
+  document.getElementById('toggleNames').classList.toggle('on', showNames);
+  document.getElementById('toggleBorders').classList.toggle('on', showBorders);
+  document.getElementById('toggleHover').classList.toggle('on', showHoverHighlight);
+  document.getElementById('toggleNeon').classList.toggle('on', showNeon);
+  document.getElementById('neonSection').classList.toggle('enabled', showNeon);
+  syncNeonScope();
+  document.getElementById('toggleGradient').classList.toggle('on', showGradient);
+  document.getElementById('gradientSection').classList.toggle('enabled', showGradient);
+  syncGradientScope();
+  document.getElementById('toggleFacets').classList.toggle('on', showFacets);
+  document.getElementById('toggleBgFacets').classList.toggle('on', showBgFacets);
+  document.getElementById('toggleLandFacets').classList.toggle('on', showLandFacets);
+  syncPolyCards();
+  document.getElementById('colorBg').value = colorBg;
+  document.getElementById('colorBorder').value = colorBorder;
+  document.getElementById('colorLand').value = colorLand;
+  document.getElementById('colorSelected').value = colorSelected;
+  document.getElementById('colorNeon').value = neonColor;
+  document.getElementById('colorGradientA').value = gradientColorA;
+  document.getElementById('colorGradientB').value = gradientColorB;
+  syncRangeControl('neonIntensity', neonIntensity);
+  syncRangeControl('neonBlur', neonBlur);
+  syncRangeControl('neonWidth', neonWidth);
+  syncRangeControl('gradientAngle', gradientAngle);
+  syncRangeControl('gradientMix', gradientMix);
+  syncRangeControl('densitySelected', densitySelected);
+  syncRangeControl('contrastSelected', contrastSelected);
+  syncRangeControl('densityLand', densityLand);
+  syncRangeControl('contrastLand', contrastLand);
+  syncRangeControl('densityBg', densityBg);
+  syncRangeControl('contrastBg', contrastBg);
+}
+
+function syncPolyCards() {
+  document.querySelector('[data-poly-card="selected"]').classList.toggle('enabled', showFacets);
+  document.querySelector('[data-poly-card="land"]').classList.toggle('enabled', showLandFacets);
+  document.querySelector('[data-poly-card="background"]').classList.toggle('enabled', showBgFacets);
+}
+
+function syncRangeControl(id, value) {
+  const input = document.getElementById(id);
+  const label = document.getElementById(id + 'Value');
+  input.value = value;
+  label.textContent = value;
+}
+
+function syncNeonScope() {
+  document.querySelectorAll('[data-neon-scope]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.neonScope === neonScope);
+  });
+  document.getElementById('neonScopeValue').textContent = neonScope === 'all' ? 'All' : 'Selected';
+}
+
+function syncGradientScope() {
+  document.querySelectorAll('[data-gradient-scope]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.gradientScope === gradientScope);
+  });
+  document.getElementById('gradientScopeValue').textContent = gradientScope === 'all' ? 'All' : 'Selected';
+}
+
+function syncThemeButtons() {
+  document.getElementById('toggleThemeGroup').classList.toggle('on', themeFamilyFilter === 'poly');
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.theme === currentTheme);
+  });
+}
+
+function markCustomTheme() {
+  currentTheme = 'custom';
+  syncThemeButtons();
+}
+
+function buildThemeButtons() {
+  for (const group of ['dark', 'light']) {
+    const grid = document.getElementById(group + 'ThemeGrid');
+    const entries = Object.entries(THEMES).filter(([, theme]) => theme.group === group && theme.family === themeFamilyFilter);
+    grid.innerHTML = entries.map(([key, theme]) => `
+      <button class="theme-btn" data-theme="${key}" type="button">
+        <div>
+          <div class="theme-name">${theme.label}</div>
+          <div class="theme-style">${theme.style}</div>
+        </div>
+        <div class="theme-swatches">
+          <span class="theme-swatch" style="background:${theme.bg}"></span>
+          <span class="theme-swatch" style="background:${theme.land}"></span>
+          <span class="theme-swatch" style="background:${theme.highlight}"></span>
+        </div>
+      </button>
+    `).join('');
+    grid.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+    });
+  }
+  syncThemeButtons();
+}
+
+function initToggles() {
+  buildThemeButtons();
+  applyTheme(currentTheme, false);
+}
+
+function toggleOption(id, getter, setter) {
+  const el = document.getElementById(id);
+  setter(!getter());
+  el.classList.toggle('on', getter());
+  syncPolyCards();
+  markCustomTheme();
+  render();
+}
+
+function bindRange(id, setter) {
+  const input = document.getElementById(id);
+  input.addEventListener('input', e => {
+    const value = Number(e.target.value);
+    setter(value);
+    syncRangeControl(id, value);
+    markCustomTheme();
+    render();
+  });
+}
+
+function openOptions() {
+  closeDropdown();
+  closeSourcePanel();
+  document.getElementById('optionsPanel').classList.add('open');
+  document.getElementById('dropdownOverlay').classList.add('open');
+}
+
+function closeOptions() {
+  document.getElementById('optionsPanel').classList.remove('open');
+  if (!document.getElementById('dropdownPanel').classList.contains('open')) {
+    document.getElementById('dropdownOverlay').classList.remove('open');
+  }
+}
+
+function openSourcePanel() {
+  closeDropdown();
+  closeOptions();
+  document.getElementById('sourcePanel').classList.add('open');
+  document.getElementById('dropdownOverlay').classList.add('open');
+}
+
+function closeSourcePanel() {
+  document.getElementById('sourcePanel').classList.remove('open');
+  if (
+    !document.getElementById('dropdownPanel').classList.contains('open') &&
+    !document.getElementById('optionsPanel').classList.contains('open')
+  ) {
+    document.getElementById('dropdownOverlay').classList.remove('open');
+  }
+}
+
+document.getElementById('optionsBtn').addEventListener('click', () => {
+  const panel = document.getElementById('optionsPanel');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) closeOptions();
+  else openOptions();
+});
+
+document.getElementById('optionsClose').addEventListener('click', () => {
+  closeOptions();
+});
+
+document.querySelectorAll('.options-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.options-tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.options-tab-panel').forEach(panel => {
+      panel.classList.toggle('active', panel.id === tab.dataset.tab);
+    });
+  });
+});
+
+document.getElementById('sourcePanelBtn').addEventListener('click', () => {
+  const panel = document.getElementById('sourcePanel');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) closeSourcePanel();
+  else openSourcePanel();
+});
+
+document.getElementById('toggleThemeGroup').addEventListener('click', () => {
+  themeFamilyFilter = themeFamilyFilter === 'clean' ? 'poly' : 'clean';
+  buildThemeButtons();
+});
+
+document.getElementById('toggleNames').addEventListener('click', () => {
+  toggleOption('toggleNames', ()=>showNames, v=>showNames=v);
+});
+document.getElementById('toggleBorders').addEventListener('click', () => {
+  toggleOption('toggleBorders', ()=>showBorders, v=>showBorders=v);
+});
+document.getElementById('toggleHover').addEventListener('click', () => {
+  toggleOption('toggleHover', ()=>showHoverHighlight, v=>{
+    showHoverHighlight=v;
+    if (!v) {
+      hovered=null;
+      tooltip.style.opacity='0';
+      canvas.style.cursor='grab';
+    }
+  });
+});
+document.getElementById('toggleNeon').addEventListener('click', () => {
+  toggleOption('toggleNeon', ()=>showNeon, v=>{
+    showNeon=v;
+    document.getElementById('neonSection').classList.toggle('enabled', showNeon);
+  });
+});
+document.querySelectorAll('[data-neon-scope]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    neonScope = btn.dataset.neonScope;
+    syncNeonScope();
+    markCustomTheme();
+    render();
+  });
+});
+document.getElementById('toggleGradient').addEventListener('click', () => {
+  toggleOption('toggleGradient', ()=>showGradient, v=>{
+    showGradient=v;
+    document.getElementById('gradientSection').classList.toggle('enabled', showGradient);
+  });
+});
+document.querySelectorAll('[data-gradient-scope]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    gradientScope = btn.dataset.gradientScope;
+    syncGradientScope();
+    markCustomTheme();
+    render();
+  });
+});
+document.getElementById('toggleFacets').addEventListener('click', () => {
+  toggleOption('toggleFacets', ()=>showFacets, v=>showFacets=v);
+});
+document.getElementById('toggleBgFacets').addEventListener('click', () => {
+  toggleOption('toggleBgFacets', ()=>showBgFacets, v=>showBgFacets=v);
+});
+document.getElementById('toggleLandFacets').addEventListener('click', () => {
+  toggleOption('toggleLandFacets', ()=>showLandFacets, v=>showLandFacets=v);
+});
+
+document.getElementById('colorBg').addEventListener('input', e => {
+  colorBg = e.target.value; setCssVar('--bg', colorBg); markCustomTheme(); render();
+});
+document.getElementById('colorBorder').addEventListener('input', e => {
+  colorBorder = e.target.value; markCustomTheme(); render();
+});
+document.getElementById('colorLand').addEventListener('input', e => {
+  colorLand = e.target.value;
+  colorLandHover = shadeHex(colorLand, 28);
+  markCustomTheme();
+  render();
+});
+document.getElementById('colorSelected').addEventListener('input', e => {
+  colorSelected = e.target.value;
+  setCssVar('--highlight', colorSelected);
+  markCustomTheme();
+  render();
+});
+document.getElementById('colorNeon').addEventListener('input', e => {
+  neonColor = e.target.value;
+  markCustomTheme();
+  render();
+});
+document.getElementById('colorGradientA').addEventListener('input', e => {
+  gradientColorA = e.target.value;
+  markCustomTheme();
+  render();
+});
+document.getElementById('colorGradientB').addEventListener('input', e => {
+  gradientColorB = e.target.value;
+  markCustomTheme();
+  render();
+});
+
+bindRange('neonIntensity', v=>neonIntensity=v);
+bindRange('neonBlur', v=>neonBlur=v);
+bindRange('neonWidth', v=>neonWidth=v);
+bindRange('gradientAngle', v=>gradientAngle=v);
+bindRange('gradientMix', v=>gradientMix=v);
+bindRange('densitySelected', v=>densitySelected=v);
+bindRange('contrastSelected', v=>contrastSelected=v);
+bindRange('densityLand', v=>densityLand=v);
+bindRange('contrastLand', v=>contrastLand=v);
+bindRange('densityBg', v=>densityBg=v);
+bindRange('contrastBg', v=>contrastBg=v);
+
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  animating=false;
+  themeFamilyFilter='clean';
+  buildThemeButtons();
+  applyTheme('ember', false);
+  highlighted.clear(); PRE_HIGHLIGHTED.forEach(n=>highlighted.add(n));
+  render();updateSelectedList();updateDropdownList();fitToSelection();
+});
+
+// ── MAP SOURCES ──
+const MAP_SOURCES = {
+  '110m': 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json',
+  '50m':  'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json',
+  '10m':  'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-10m.json',
+};
+let currentSource = '110m';
+
+async function loadMap(key) {
+  const url = MAP_SOURCES[key];
+  const loadingEl = document.getElementById('sourceLoading');
+  const btns = document.querySelectorAll('.source-btn');
+  btns.forEach(b => b.classList.add('loading'));
+  loadingEl.style.display = 'flex';
+
+  try {
+    const r = await fetch(url);
+    const topo = await r.json();
+    allCountries = decodeTopo(topo);
+    currentSource = key;
+    btns.forEach(b => {
+      b.classList.remove('loading', 'active');
+      if (b.dataset.key === key) b.classList.add('active');
+    });
+    if (highlighted.size) fitToSelection(false);
+    else render();
+  } catch(e) {
+    console.error('Failed to load map source:', e);
+  } finally {
+    loadingEl.style.display = 'none';
+    btns.forEach(b => b.classList.remove('loading'));
+  }
+}
+
+document.getElementById('sourceBtns').querySelectorAll('.source-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.dataset.key === currentSource) return;
+    loadMap(btn.dataset.key);
+  });
+});
+
+window.addEventListener('resize',()=>{
+  if (highlighted.size) fitToSelection(false);
+  else render();
+});
+
+// ── INIT ──
+(async()=>{
+  try{
+    const r=await fetch(MAP_SOURCES['110m']);
+    const topo=await r.json();
+    allCountries=decodeTopo(topo);
+    document.getElementById('loading').classList.add('hidden');
+    render(); updateSelectedList(); initToggles();
+    fitToSelection(false); render();
+  }catch(e){
+    document.getElementById('loading').innerHTML='<div style="color:#f87171">Failed to load map data</div>';
+  }
+})();
+</script>
+</body>
+</html>
+
