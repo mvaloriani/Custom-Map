@@ -98,9 +98,9 @@
     padding: 0.75rem 1rem; border-bottom: 1px solid var(--panel-border);
     display: flex; justify-content:space-between; align-items:center; gap:0.5rem;
   }
-  .dropdown-header span { font-size:0.78rem; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; }
+  .dropdown-header span { font-size:0.78rem; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; color:var(--text); }
   .dropdown-close {
-    background:none; border:none; color:var(--text-dim);
+    background:none; border:none; color:var(--text);
     font-size:1.2rem; cursor:pointer; padding:0.15rem; line-height:1; flex-shrink:0;
   }
   .dropdown-close:hover { color:var(--text); }
@@ -123,12 +123,12 @@
     padding:0.3rem 0.65rem; border-radius:20px;
     font-size:0.68rem; font-weight:600; letter-spacing:0.4px;
     cursor:pointer; border:1px solid var(--panel-border);
-    background:rgba(255,255,255,0.04); color:var(--text-dim);
+    background:rgba(255,255,255,0.08); color:var(--text);
     font-family:'DM Sans',sans-serif; transition:all 0.15s; white-space:nowrap;
   }
   .continent-btn:hover { background:var(--control-hover); color:var(--text); }
   .continent-btn.active { background:var(--highlight); border-color:var(--highlight); color:#000; }
-  .continent-btn.partial { border-color:var(--highlight); color:var(--highlight); }
+  .continent-btn.partial { border-color:var(--highlight); color:var(--text); background:var(--highlight-soft); }
 
   .dropdown-list { flex:1; overflow-y:auto; padding:0.3rem 0; }
   .dropdown-list::-webkit-scrollbar { width:4px; }
@@ -156,11 +156,41 @@
   }
   .dropdown-actions button {
     background:rgba(255,255,255,0.05); border:1px solid var(--panel-border);
-    color:var(--text-dim); padding:0.3rem 0.6rem; border-radius:4px;
+    color:var(--text); padding:0.3rem 0.6rem; border-radius:4px;
     font-size:0.65rem; font-weight:500; cursor:pointer;
     font-family:'DM Sans',sans-serif; text-transform:uppercase; letter-spacing:0.5px; transition:all 0.15s;
   }
-  .dropdown-actions button:hover { color:var(--text); background:rgba(255,255,255,0.08); }
+  .dropdown-actions button:hover { color:var(--text); background:rgba(255,255,255,0.12); }
+
+  .export-modal {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(380px, calc(100vw - 2rem));
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 10px; box-shadow: 0 22px 70px rgba(0,0,0,0.55);
+    z-index: 120; display: none; overflow: hidden;
+  }
+  .export-modal.open { display: block; }
+  .export-body { padding: 0.9rem 1rem 1rem; display: grid; gap: 0.75rem; }
+  .export-row { display: grid; gap: 0.35rem; }
+  .export-row label {
+    font-size: 0.66rem; font-weight: 700; letter-spacing: 0.5px;
+    color: var(--text-dim); text-transform: uppercase;
+  }
+  .export-row select,
+  .export-row input {
+    width: 100%; background: rgba(255,255,255,0.05);
+    border: 1px solid var(--panel-border); border-radius: 6px;
+    color: var(--text); padding: 0.48rem 0.6rem;
+    font: 500 0.78rem 'DM Sans', sans-serif; outline: none;
+  }
+  .export-row select option {
+    background: #ffffff;
+    color: #111827;
+  }
+  .export-actions {
+    border-top: 1px solid var(--panel-border); padding: 0.75rem 1rem;
+    display: flex; justify-content: flex-end; gap: 0.5rem;
+  }
 
   .tooltip {
     position:fixed; background:var(--panel-bg); border:1px solid var(--panel-border);
@@ -376,6 +406,7 @@
     <button class="bar-btn" id="fitBtn">Fit</button>
     <button class="bar-btn" id="resetBtn">Reset</button>
     <button class="bar-btn" id="sourcePanelBtn">Detail</button>
+    <button class="bar-btn" id="exportJpgBtn">Export JPG</button>
     <button class="bar-btn" id="optionsBtn">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       Options
@@ -386,6 +417,31 @@
     </button>
   </div>
   <div class="dropdown-overlay" id="dropdownOverlay"></div>
+
+  <div class="export-modal" id="exportModal">
+    <div class="dropdown-header">
+      <span>Export Image</span>
+      <button class="dropdown-close" id="exportClose">✕</button>
+    </div>
+    <div class="export-body">
+      <div class="export-row">
+        <label for="exportFormat">Format</label>
+        <select id="exportFormat">
+          <option value="image/jpeg">JPG</option>
+          <option value="image/png">PNG</option>
+          <option value="image/webp">WEBP</option>
+        </select>
+      </div>
+      <div class="export-row">
+        <label>Area</label>
+        <input type="text" value="Current view" readonly />
+      </div>
+    </div>
+    <div class="export-actions">
+      <button class="bar-btn" id="exportCancel">Cancel</button>
+      <button class="select-btn" id="exportConfirm">Export</button>
+    </div>
+  </div>
 
   <!-- Options panel -->
   <div class="options-panel" id="optionsPanel">
@@ -1682,6 +1738,7 @@ document.getElementById('dropdownOverlay').addEventListener('click',()=>{
   closeDropdown();
   closeOptions();
   closeSourcePanel();
+  closeExportModal();
 });
 document.getElementById('searchInput').addEventListener('input',updateDropdownList);
 
@@ -1876,7 +1933,11 @@ function openOptions() {
 
 function closeOptions() {
   document.getElementById('optionsPanel').classList.remove('open');
-  if (!document.getElementById('dropdownPanel').classList.contains('open')) {
+  if (
+    !document.getElementById('dropdownPanel').classList.contains('open') &&
+    !document.getElementById('sourcePanel').classList.contains('open') &&
+    !document.getElementById('exportModal').classList.contains('open')
+  ) {
     document.getElementById('dropdownOverlay').classList.remove('open');
   }
 }
@@ -1892,7 +1953,8 @@ function closeSourcePanel() {
   document.getElementById('sourcePanel').classList.remove('open');
   if (
     !document.getElementById('dropdownPanel').classList.contains('open') &&
-    !document.getElementById('optionsPanel').classList.contains('open')
+    !document.getElementById('optionsPanel').classList.contains('open') &&
+    !document.getElementById('exportModal').classList.contains('open')
   ) {
     document.getElementById('dropdownOverlay').classList.remove('open');
   }
@@ -2030,6 +2092,52 @@ bindRange('contrastLand', v=>contrastLand=v);
 bindRange('densityBg', v=>densityBg=v);
 bindRange('contrastBg', v=>contrastBg=v);
 
+function openExportModal() {
+  closeDropdown();
+  closeOptions();
+  closeSourcePanel();
+  document.getElementById('exportModal').classList.add('open');
+  document.getElementById('dropdownOverlay').classList.add('open');
+}
+
+function closeExportModal() {
+  document.getElementById('exportModal').classList.remove('open');
+  if (
+    !document.getElementById('dropdownPanel').classList.contains('open') &&
+    !document.getElementById('optionsPanel').classList.contains('open') &&
+    !document.getElementById('sourcePanel').classList.contains('open')
+  ) {
+    document.getElementById('dropdownOverlay').classList.remove('open');
+  }
+}
+
+function exportCurrentView(format) {
+  render();
+  const out = document.createElement('canvas');
+  out.width = canvas.width;
+  out.height = canvas.height;
+  const outCtx = out.getContext('2d');
+  outCtx.fillStyle = colorBg;
+  outCtx.fillRect(0, 0, out.width, out.height);
+  outCtx.drawImage(canvas, 0, 0);
+
+  const link = document.createElement('a');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const ext = format === 'image/png' ? 'png' : format === 'image/webp' ? 'webp' : 'jpg';
+  link.download = `custom-map-${stamp}.${ext}`;
+  link.href = out.toDataURL(format, format === 'image/png' ? undefined : 0.95);
+  link.click();
+}
+
+document.getElementById('exportJpgBtn').addEventListener('click', openExportModal);
+document.getElementById('exportClose').addEventListener('click', closeExportModal);
+document.getElementById('exportCancel').addEventListener('click', closeExportModal);
+document.getElementById('exportConfirm').addEventListener('click', () => {
+  const format = document.getElementById('exportFormat').value;
+  closeExportModal();
+  exportCurrentView(format);
+});
+
 document.getElementById('resetBtn').addEventListener('click',()=>{
   animating=false;
   themeFamilyFilter='clean';
@@ -2101,4 +2209,3 @@ window.addEventListener('resize',()=>{
 </script>
 </body>
 </html>
-
