@@ -942,8 +942,7 @@ let colorLand = '#1a2236';
 let colorLandHover = '#253350';
 let colorLabelBg = 'rgba(0,0,0,0.65)';
 let colorLabelText = '#ffffff';
-const MAP_REPEAT_SPACING = 0.78;
-
+const MAP_REPEAT_SPACING = 1;
 const THEMES = {
   ember: { family:'clean', group:'dark', label:'Ember Grid', style:'futuristic', showNames:true, showBorders:true, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#060a12', text:'#e2e8f0', textDim:'#7c8aa3', panelBg:'#0d1220', panelBorder:'#243048', controlHover:'#1b2a44', highlight:'#f59e0b', highlightSoft:'rgba(245,158,11,0.18)', highlightBorder:'rgba(245,158,11,0.36)', land:'#1a2236', landHover:'#253350', labelBg:'rgba(0,0,0,0.66)', labelText:'#ffffff' },
   polar: { family:'clean', group:'dark', label:'Polar Night', style:'classic', showNames:true, showBorders:true, showFacets:false, showBgFacets:false, showLandFacets:false, bg:'#07111d', text:'#e8f3ff', textDim:'#8ba2b8', panelBg:'#0d1824', panelBorder:'#26394d', controlHover:'#17283a', highlight:'#7dd3fc', highlightSoft:'rgba(125,211,252,0.16)', highlightBorder:'rgba(125,211,252,0.38)', land:'#172638', landHover:'#20374f', labelBg:'rgba(4,14,24,0.72)', labelText:'#f8fbff' },
@@ -1027,7 +1026,6 @@ function project(lon, lat) {
   return [x,y];
 }
 
-// lonOffset: -1 (left tile), 0 (center), +1 (right tile)
 function toScreen(lon, lat, w, h, lonOffset=0) {
   const [px,py] = project(lon, lat);
   const base = Math.min(w, h*2) * 1.02;
@@ -1401,15 +1399,16 @@ function render() {
     return pa-pb;
   });
 
-  // Render 3 tiles: left(-1), center(0), right(+1)
-  // Only render tiles that are potentially visible
   const base = Math.min(w, h*2) * 1.02;
   const tileW = base * transform.scale;
   const tileStep = tileW * MAP_REPEAT_SPACING;
 
-  for (const offset of [-1, 0, 1]) {
-    // Rough tile visibility check
-    const tileLeft  = offset * tileStep - tileW/2 + w/2 + transform.x;
+  // Compute the range of tile offsets needed to fully cover the visible canvas
+  const minOff = Math.floor((-w/2 - transform.x - tileW/2) / tileStep) - 1;
+  const maxOff = Math.ceil(( w/2 - transform.x + tileW/2) / tileStep) + 1;
+
+  for (let offset = minOff; offset <= maxOff; offset++) {
+    const tileLeft = offset * tileStep - tileW/2 + w/2 + transform.x;
     const tileRight = offset * tileStep + tileW/2 + w/2 + transform.x;
     if (tileRight < -10 || tileLeft > w + 10) continue;
 
@@ -1455,8 +1454,7 @@ function render() {
     for (const c of sorted) {
       if (!highlighted.has(c.name)) continue;
       const lc=getLabelCenter(c);
-      // Try center tile first, then side tiles
-      for (const off of [0, -1, 1]) {
+      for (let off = minOff; off <= maxOff; off++) {
         const [sx,sy]=toScreen(lc[0],lc[1],w,h,off);
         if(sx<-20||sx>w+20||sy<-20||sy>h+20) continue;
         const txt=c.name.toUpperCase();
@@ -1465,7 +1463,7 @@ function render() {
         ctx.fillRect(sx-tw/2-4,sy-fontSize/2-2,tw+8,fontSize+5);
         ctx.fillStyle=colorLabelText;
         ctx.fillText(txt,sx,sy);
-        break; // only draw once
+        break;
       }
     }
   }
@@ -1494,10 +1492,16 @@ function hitTest(mx,my) {
     return pb-pa;
   });
 
+  const base = Math.min(w, h*2) * 1.02;
+  const tileW = base * transform.scale;
+  const tileStep = tileW * MAP_REPEAT_SPACING;
+  const minOff = Math.floor((-w/2 - transform.x - tileW/2) / tileStep) - 1;
+  const maxOff = Math.ceil(( w/2 - transform.x + tileW/2) / tileStep) + 1;
+
   ctx.save();
   ctx.setTransform(1,0,0,1,0,0);
   for (const c of sorted) {
-    for (const offset of [0, -1, 1]) {
+    for (let offset = minOff; offset <= maxOff; offset++) {
       const[bx0,by0]=toScreen(c.bbox.minLon,c.bbox.maxLat,w,h,offset);
       const[bx1,by1]=toScreen(c.bbox.maxLon,c.bbox.minLat,w,h,offset);
       const left=Math.min(bx0,bx1)-2, right=Math.max(bx0,bx1)+2;
