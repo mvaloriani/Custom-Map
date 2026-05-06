@@ -172,6 +172,7 @@
   .export-modal.open { display: block; }
   .export-body { padding: 0.9rem 1rem 1rem; display: grid; gap: 0.75rem; }
   .export-row { display: grid; gap: 0.35rem; }
+  .export-row.hidden { display: none; }
   .export-row label {
     font-size: 0.66rem; font-weight: 700; letter-spacing: 0.5px;
     color: var(--text-dim); text-transform: uppercase;
@@ -186,6 +187,28 @@
   .export-row select option {
     background: #ffffff;
     color: #111827;
+  }
+  .export-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.03);
+  }
+  .export-toggle-row.hidden { display: none; }
+  .export-toggle-row span {
+    font-size: 0.74rem;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .export-toggle-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--highlight);
+    cursor: pointer;
   }
   .export-actions {
     border-top: 1px solid var(--panel-border); padding: 0.75rem 1rem;
@@ -435,6 +458,13 @@
       <div class="export-row">
         <label>Area</label>
         <input type="text" value="Current view" readonly />
+      </div>
+      <div class="export-row" id="exportTransparentRow">
+        <label>Transparency</label>
+        <label class="export-toggle-row" for="exportTransparentBg">
+          <span>Transparent background</span>
+          <input type="checkbox" id="exportTransparentBg" />
+        </label>
       </div>
     </div>
     <div class="export-actions">
@@ -1436,14 +1466,17 @@ function drawCountry(c, w, h, lonOffset, isHL, isHov) {
 }
 
 // ── RENDER ──
-function render() {
+function render(opts = {}) {
+  const transparentBg = !!opts.transparentBg;
   const dpr=window.devicePixelRatio||1;
   const w=canvas.clientWidth, h=canvas.clientHeight;
   canvas.width=w*dpr; canvas.height=h*dpr;
   ctx.setTransform(dpr,0,0,dpr,0,0);
 
   // Sea
-  if (showBgFacets) {
+  if (transparentBg) {
+    ctx.clearRect(0,0,w,h);
+  } else if (showBgFacets) {
     drawBackgroundFacets(w, h);
   } else {
     ctx.fillStyle = colorBg;
@@ -2096,6 +2129,12 @@ function openExportModal() {
   closeDropdown();
   closeOptions();
   closeSourcePanel();
+  const formatEl = document.getElementById('exportFormat');
+  const transparentRow = document.getElementById('exportTransparentRow');
+  const transparentInput = document.getElementById('exportTransparentBg');
+  const supportsAlpha = formatEl.value === 'image/png' || formatEl.value === 'image/webp';
+  transparentInput.checked = false;
+  transparentRow.classList.toggle('hidden', !supportsAlpha);
   document.getElementById('exportModal').classList.add('open');
   document.getElementById('dropdownOverlay').classList.add('open');
 }
@@ -2111,14 +2150,17 @@ function closeExportModal() {
   }
 }
 
-function exportCurrentView(format) {
-  render();
+function exportCurrentView(format, transparentBg = false) {
+  const allowTransparent = transparentBg && (format === 'image/png' || format === 'image/webp');
+  render({ transparentBg: allowTransparent });
   const out = document.createElement('canvas');
   out.width = canvas.width;
   out.height = canvas.height;
   const outCtx = out.getContext('2d');
-  outCtx.fillStyle = colorBg;
-  outCtx.fillRect(0, 0, out.width, out.height);
+  if (!allowTransparent) {
+    outCtx.fillStyle = colorBg;
+    outCtx.fillRect(0, 0, out.width, out.height);
+  }
   outCtx.drawImage(canvas, 0, 0);
 
   const link = document.createElement('a');
@@ -2127,15 +2169,24 @@ function exportCurrentView(format) {
   link.download = `custom-map-${stamp}.${ext}`;
   link.href = out.toDataURL(format, format === 'image/png' ? undefined : 0.95);
   link.click();
+  render();
 }
 
 document.getElementById('exportJpgBtn').addEventListener('click', openExportModal);
 document.getElementById('exportClose').addEventListener('click', closeExportModal);
 document.getElementById('exportCancel').addEventListener('click', closeExportModal);
+document.getElementById('exportFormat').addEventListener('change', (e) => {
+  const supportsAlpha = e.target.value === 'image/png' || e.target.value === 'image/webp';
+  const transparentRow = document.getElementById('exportTransparentRow');
+  const transparentInput = document.getElementById('exportTransparentBg');
+  transparentRow.classList.toggle('hidden', !supportsAlpha);
+  if (!supportsAlpha) transparentInput.checked = false;
+});
 document.getElementById('exportConfirm').addEventListener('click', () => {
   const format = document.getElementById('exportFormat').value;
+  const transparentBg = document.getElementById('exportTransparentBg').checked;
   closeExportModal();
-  exportCurrentView(format);
+  exportCurrentView(format, transparentBg);
 });
 
 document.getElementById('resetBtn').addEventListener('click',()=>{
