@@ -16,20 +16,22 @@
     --panel-bg: #0d1220;
     --panel-border: #1e293b;
     --control-hover: #253350;
+    --bar-offset: calc(52px + env(safe-area-inset-bottom, 0px));
   }
+  html, body { width: 100%; height: 100%; }
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
     background: var(--bg); color: var(--text);
     font-family: 'DM Sans', sans-serif;
-    height: 100vh; overflow: hidden; user-select: none;
+    height: 100dvh; overflow: hidden; -webkit-user-select: none; user-select: none;
   }
-  .app { width:100%; height:100vh; display:flex; flex-direction:column; }
-  .map-wrap { flex:1; position:relative; overflow:hidden; }
-  #map-canvas { width:100%; height:100%; display:block; cursor:grab; }
+  .app { width:100%; height:100dvh; position:relative; }
+  .map-wrap { position:fixed; inset:0; overflow:hidden; z-index:1; }
+  #map-canvas { width:100%; height:100%; display:block; cursor:grab; touch-action:none; }
   #map-canvas:active { cursor:grabbing; }
 
   .zoom-controls {
-    position:absolute; bottom:5rem; right:1rem;
+    position:fixed; bottom:calc(var(--bar-offset) + 1rem); right:1rem;
     display:flex; flex-direction:column; gap:1px; z-index:20;
   }
   .zoom-btn {
@@ -44,11 +46,40 @@
   .zoom-btn:hover { background:var(--control-hover); }
 
   .bottom-bar {
-    position:relative; z-index:30;
+    position:fixed; left:0; right:0; bottom:0; z-index:30;
     background: var(--panel-bg); border-top: 1px solid var(--panel-border);
-    padding: 0.65rem 1.2rem;
+    padding: 0.65rem 1.2rem calc(0.65rem + env(safe-area-inset-bottom, 0px));
     display: flex; align-items: center; gap: 0.7rem; min-height: 52px;
   }
+  .bottom-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .mobile-menu-btn {
+    display: none;
+    width: 38px;
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid var(--panel-border);
+    background: transparent;
+    color: var(--text);
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .mobile-menu-btn:hover { background: var(--control-hover); }
+  .mobile-menu-btn svg { width: 18px; height: 18px; }
+  .mobile-actions-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.36);
+    z-index: 25;
+    display: none;
+  }
+  .mobile-actions-overlay.open { display: block; }
   .selected-list {
     flex:1; display:flex; gap:0.45rem; flex-wrap:wrap; align-items:center;
     max-height: 60px; overflow-y: auto;
@@ -86,7 +117,7 @@
   .dropdown-overlay { display:none; position:fixed; inset:0; z-index:90; }
   .dropdown-overlay.open { display:block; }
   .dropdown-panel {
-    position: fixed; bottom: 52px; right: 0.5rem;
+    position: fixed; bottom: var(--bar-offset); right: 0.5rem;
     width: 340px; max-height: 72vh;
     background: var(--panel-bg); border: 1px solid var(--panel-border);
     border-radius: 10px 10px 0 0; box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
@@ -234,7 +265,7 @@
   }
   /* Options panel */
   .options-panel {
-    position: fixed; top: 0; right: 0; bottom: 0;
+    position: fixed; top: 0; right: 0; bottom: var(--bar-offset);
     width: min(390px, 92vw);
     background: var(--panel-bg); border-left: 1px solid var(--panel-border);
     box-shadow: -18px 0 55px rgba(0,0,0,0.42);
@@ -383,7 +414,7 @@
     padding: 0.75rem 1rem 1rem;
   }
   .source-panel {
-    position: fixed; bottom: 52px; right: 5.9rem;
+    position: fixed; bottom: var(--bar-offset); right: 5.9rem;
     width: 300px;
     background: var(--panel-bg); border: 1px solid var(--panel-border);
     border-radius: 10px 10px 0 0; box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
@@ -422,6 +453,88 @@
   }
 
   @keyframes spin { to { transform:rotate(360deg); } }
+
+  @media (max-width: 900px) {
+    :root {
+      --bar-offset: calc(68px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .bottom-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.45rem 0.5rem calc(0.45rem + env(safe-area-inset-bottom, 0px));
+      min-height: 64px;
+    }
+
+    .selected-list {
+      flex: 1;
+      max-height: 34px;
+      min-height: 24px;
+    }
+
+    .mobile-menu-btn {
+      display: inline-flex;
+    }
+
+    .bottom-actions {
+      position: fixed;
+      right: 0.5rem;
+      bottom: var(--bar-offset);
+      width: min(280px, calc(100vw - 1rem));
+      padding: 0.5rem;
+      border: 1px solid var(--panel-border);
+      border-radius: 10px 10px 0 0;
+      background: var(--panel-bg);
+      box-shadow: 0 -8px 32px rgba(0,0,0,0.42);
+      display: none;
+      z-index: 40;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem;
+    }
+    .bottom-actions.open {
+      display: grid;
+    }
+
+    .bottom-actions .bar-btn,
+    .bottom-actions .select-btn {
+      justify-content: center;
+      font-size: 0.62rem;
+      padding: 0.4rem 0.5rem;
+    }
+
+    .zoom-controls {
+      right: 0.6rem;
+      bottom: calc(var(--bar-offset) + 0.65rem);
+    }
+
+    .dropdown-panel {
+      left: 0.4rem;
+      right: 0.4rem;
+      width: auto;
+      max-height: min(64dvh, 430px);
+    }
+
+    .source-panel {
+      right: 0.4rem;
+      width: min(330px, calc(100vw - 0.8rem));
+    }
+
+    .options-panel {
+      width: min(100vw, 420px);
+      box-shadow: -8px 0 36px rgba(0,0,0,0.38);
+    }
+
+    .options-tabs {
+      display: flex;
+      gap: 0.35rem;
+      overflow-x: auto;
+    }
+
+    .options-tab {
+      flex: 0 0 auto;
+    }
+  }
 </style>
 </head>
 <body>
@@ -436,19 +549,27 @@
   </div>
   <div class="bottom-bar">
     <div class="selected-list" id="selectedList"></div>
-    <button class="bar-btn" id="fitBtn">Fit</button>
-    <button class="bar-btn" id="resetBtn">Reset</button>
-    <button class="bar-btn" id="sourcePanelBtn">Detail</button>
-    <button class="bar-btn" id="exportJpgBtn">Export</button>
-    <button class="bar-btn" id="optionsBtn">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      Options
+    <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open menu" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M4 7h16M4 12h16M4 17h16"/>
+      </svg>
     </button>
-    <button class="select-btn" id="selectBtn">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-      Select
-    </button>
+    <div class="bottom-actions" id="bottomActions">
+      <button class="bar-btn" id="fitBtn">Fit</button>
+      <button class="bar-btn" id="resetBtn">Reset</button>
+      <button class="bar-btn" id="sourcePanelBtn">Detail</button>
+      <button class="bar-btn" id="exportJpgBtn">Export</button>
+      <button class="bar-btn" id="optionsBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Options
+      </button>
+      <button class="select-btn" id="selectBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Select
+      </button>
+    </div>
   </div>
+  <div class="mobile-actions-overlay" id="mobileActionsOverlay"></div>
   <div class="dropdown-overlay" id="dropdownOverlay"></div>
 
   <div class="export-modal" id="exportModal">
@@ -1782,6 +1903,50 @@ document.getElementById('actionDeselectAll').addEventListener('click',()=>{
   highlighted.clear();render();updateSelectedList();updateDropdownList();
 });
 
+// ── MOBILE BOTTOM ACTIONS ──
+function isMobileLayout() {
+  return window.matchMedia('(max-width: 900px)').matches;
+}
+
+function closeMobileActions() {
+  const actions = document.getElementById('bottomActions');
+  const btn = document.getElementById('mobileMenuBtn');
+  const overlay = document.getElementById('mobileActionsOverlay');
+  actions.classList.remove('open');
+  btn.setAttribute('aria-expanded', 'false');
+  overlay.classList.remove('open');
+}
+
+function openMobileActions() {
+  if (!isMobileLayout()) return;
+  closeDropdown();
+  closeOptions();
+  closeSourcePanel();
+  closeExportModal();
+  const actions = document.getElementById('bottomActions');
+  const btn = document.getElementById('mobileMenuBtn');
+  const overlay = document.getElementById('mobileActionsOverlay');
+  actions.classList.add('open');
+  btn.setAttribute('aria-expanded', 'true');
+  overlay.classList.add('open');
+}
+
+document.getElementById('mobileMenuBtn').addEventListener('click', () => {
+  const isOpen = document.getElementById('bottomActions').classList.contains('open');
+  if (isOpen) closeMobileActions();
+  else openMobileActions();
+});
+
+document.getElementById('mobileActionsOverlay').addEventListener('click', closeMobileActions);
+
+document.getElementById('bottomActions').addEventListener('click', event => {
+  if (!isMobileLayout()) return;
+  const target = event.target;
+  if (target instanceof Element && target.closest('button')) {
+    closeMobileActions();
+  }
+});
+
 // ── OPTIONS PANEL ──
 function setCssVar(name, value) {
   document.documentElement.style.setProperty(name, value);
@@ -2623,6 +2788,7 @@ document.getElementById('sourceBtns').querySelectorAll('.source-btn').forEach(bt
 });
 
 window.addEventListener('resize',()=>{
+  if (!isMobileLayout()) closeMobileActions();
   if (highlighted.size) fitToSelection(false);
   else render();
 });
