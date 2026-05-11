@@ -72,6 +72,69 @@
   }
   .mobile-menu-btn:hover { background: var(--control-hover); }
   .mobile-menu-btn svg { width: 18px; height: 18px; }
+  .mobile-selected-btn {
+    display: none;
+    border: 1px solid var(--panel-border);
+    background: transparent;
+    color: var(--text);
+    border-radius: 8px;
+    height: 34px;
+    padding: 0 0.7rem;
+    font: 700 0.68rem 'DM Sans', sans-serif;
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
+    cursor: pointer;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+  }
+  .mobile-selected-btn:hover { background: var(--control-hover); }
+  .mobile-selected-count {
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    background: var(--highlight-soft);
+    border: 1px solid var(--highlight-border);
+    color: var(--highlight);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.64rem;
+    padding: 0 0.32rem;
+  }
+  .mobile-selected-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.36);
+    z-index: 25;
+    display: none;
+  }
+  .mobile-selected-overlay.open { display: block; }
+  .mobile-selected-panel {
+    position: fixed;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: var(--bar-offset);
+    max-height: min(62dvh, 420px);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px 10px 0 0;
+    background: var(--panel-bg);
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.42);
+    display: none;
+    flex-direction: column;
+    z-index: 40;
+    overflow: hidden;
+  }
+  .mobile-selected-panel.open { display: flex; }
+  .mobile-selected-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.55rem 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-content: flex-start;
+  }
   .mobile-actions-overlay {
     position: fixed;
     inset: 0;
@@ -462,26 +525,33 @@
     .bottom-bar {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 0.45rem;
       padding: 0.45rem 0.5rem calc(0.45rem + env(safe-area-inset-bottom, 0px));
       min-height: 64px;
     }
 
     .selected-list {
-      flex: 1;
-      max-height: 34px;
-      min-height: 24px;
+      display: none;
+    }
+
+    .mobile-selected-btn {
+      display: inline-flex;
+      margin-right: auto;
     }
 
     .mobile-menu-btn {
       display: inline-flex;
+      margin-left: auto;
     }
 
     .bottom-actions {
       position: fixed;
-      right: 0.5rem;
+      left: 0;
+      right: 0;
       bottom: var(--bar-offset);
-      width: min(280px, calc(100vw - 1rem));
+      width: 100vw;
+      max-width: none;
       padding: 0.5rem;
       border: 1px solid var(--panel-border);
       border-radius: 10px 10px 0 0;
@@ -549,6 +619,9 @@
   </div>
   <div class="bottom-bar">
     <div class="selected-list" id="selectedList"></div>
+    <button class="mobile-selected-btn" id="mobileSelectedBtn" type="button" aria-label="Open selected countries" aria-expanded="false">
+      Countries <span class="mobile-selected-count" id="mobileSelectedCount">0</span>
+    </button>
     <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open menu" aria-expanded="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M4 7h16M4 12h16M4 17h16"/>
@@ -568,6 +641,14 @@
         Select
       </button>
     </div>
+  </div>
+  <div class="mobile-selected-overlay" id="mobileSelectedOverlay"></div>
+  <div class="mobile-selected-panel" id="mobileSelectedPanel">
+    <div class="dropdown-header">
+      <span>Selected Countries</span>
+      <button class="dropdown-close" id="mobileSelectedClose">✕</button>
+    </div>
+    <div class="mobile-selected-list" id="selectedListMobile"></div>
   </div>
   <div class="mobile-actions-overlay" id="mobileActionsOverlay"></div>
   <div class="dropdown-overlay" id="dropdownOverlay"></div>
@@ -1932,15 +2013,28 @@ function updateDropdownList(){
 
 function updateSelectedList(){
   const list=document.getElementById('selectedList');
+  const mobileList=document.getElementById('selectedListMobile');
+  const mobileCount=document.getElementById('mobileSelectedCount');
   const sorted=[...highlighted].sort();
+  mobileCount.textContent=String(sorted.length);
+
+  const listHtml = !sorted.length
+    ? '<span class="empty-msg">Click the map or use Select to pick countries</span>'
+    : sorted.map(n=>{
+        const db=COUNTRY_BY_NAME[n]||{};
+        return `<span class="selected-tag" data-name="${n}">${db.flag||''} ${n}<span class="x">✕</span></span>`;
+      }).join('');
+
+  list.innerHTML = listHtml;
+  mobileList.innerHTML = listHtml;
+
   if(!sorted.length){
-    list.innerHTML='<span class="empty-msg">Click the map or use Select to pick countries</span>';
+    return;
   } else {
-    list.innerHTML=sorted.map(n=>{
-      const db=COUNTRY_BY_NAME[n]||{};
-      return `<span class="selected-tag" data-name="${n}">${db.flag||''} ${n}<span class="x">✕</span></span>`;
-    }).join('');
     list.querySelectorAll('.selected-tag').forEach(t=>{
+      t.addEventListener('click',()=>toggleCountry(t.dataset.name));
+    });
+    mobileList.querySelectorAll('.selected-tag').forEach(t=>{
       t.addEventListener('click',()=>toggleCountry(t.dataset.name));
     });
   }
@@ -1974,6 +2068,40 @@ document.getElementById('actionDeselectAll').addEventListener('click',()=>{
   highlighted.clear();render();updateSelectedList();updateDropdownList();
 });
 
+// ── MOBILE SELECTED COUNTRIES PANEL ──
+function closeMobileSelectedPanel() {
+  const panel = document.getElementById('mobileSelectedPanel');
+  const btn = document.getElementById('mobileSelectedBtn');
+  const overlay = document.getElementById('mobileSelectedOverlay');
+  panel.classList.remove('open');
+  btn.setAttribute('aria-expanded', 'false');
+  overlay.classList.remove('open');
+}
+
+function openMobileSelectedPanel() {
+  if (!isMobileLayout()) return;
+  closeDropdown();
+  closeOptions();
+  closeSourcePanel();
+  closeExportModal();
+  closeMobileActions();
+  const panel = document.getElementById('mobileSelectedPanel');
+  const btn = document.getElementById('mobileSelectedBtn');
+  const overlay = document.getElementById('mobileSelectedOverlay');
+  panel.classList.add('open');
+  btn.setAttribute('aria-expanded', 'true');
+  overlay.classList.add('open');
+}
+
+document.getElementById('mobileSelectedBtn').addEventListener('click', () => {
+  const isOpen = document.getElementById('mobileSelectedPanel').classList.contains('open');
+  if (isOpen) closeMobileSelectedPanel();
+  else openMobileSelectedPanel();
+});
+
+document.getElementById('mobileSelectedClose').addEventListener('click', closeMobileSelectedPanel);
+document.getElementById('mobileSelectedOverlay').addEventListener('click', closeMobileSelectedPanel);
+
 // ── MOBILE BOTTOM ACTIONS ──
 function isMobileLayout() {
   return window.matchMedia('(max-width: 900px)').matches;
@@ -1994,6 +2122,7 @@ function openMobileActions() {
   closeOptions();
   closeSourcePanel();
   closeExportModal();
+  closeMobileSelectedPanel();
   const actions = document.getElementById('bottomActions');
   const btn = document.getElementById('mobileMenuBtn');
   const overlay = document.getElementById('mobileActionsOverlay');
@@ -2320,6 +2449,7 @@ function bindRange(id, setter) {
 function openOptions() {
   closeDropdown();
   closeSourcePanel();
+  closeMobileSelectedPanel();
   document.getElementById('optionsPanel').classList.add('open');
   document.getElementById('dropdownOverlay').classList.add('open');
 }
@@ -2338,6 +2468,7 @@ function closeOptions() {
 function openSourcePanel() {
   closeDropdown();
   closeOptions();
+  closeMobileSelectedPanel();
   document.getElementById('sourcePanel').classList.add('open');
   document.getElementById('dropdownOverlay').classList.add('open');
 }
@@ -2511,6 +2642,7 @@ function openExportModal() {
   closeDropdown();
   closeOptions();
   closeSourcePanel();
+  closeMobileSelectedPanel();
   document.getElementById('exportTransparentBg').checked = false;
   syncExportFormatUI();
   document.getElementById('exportModal').classList.add('open');
@@ -2859,7 +2991,10 @@ document.getElementById('sourceBtns').querySelectorAll('.source-btn').forEach(bt
 });
 
 window.addEventListener('resize',()=>{
-  if (!isMobileLayout()) closeMobileActions();
+  if (!isMobileLayout()) {
+    closeMobileActions();
+    closeMobileSelectedPanel();
+  }
   if (highlighted.size) fitToSelection(false);
   else render();
 });
