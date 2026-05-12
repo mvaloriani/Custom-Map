@@ -2143,7 +2143,16 @@ document.getElementById('mobileMenuBtn').addEventListener('click', () => {
 document.getElementById('mobileActionsOverlay').addEventListener('click', closeMobileActions);
 
 // ── BACK BUTTON INTERCEPTION ──
+let mobileBackGuardInitialized = false;
+
+function ensureMobileBackGuard() {
+  if (mobileBackGuardInitialized || !isMobileLayout()) return;
+  history.pushState({ mobileBackGuard: true }, '');
+  mobileBackGuardInitialized = true;
+}
+
 window.addEventListener('popstate', () => {
+  if (!isMobileLayout()) return;
   if (document.getElementById('dropdownPanel').classList.contains('open')) {
     closeDropdown(); return;
   }
@@ -2169,6 +2178,9 @@ window.addEventListener('popstate', () => {
     history.pushState({menu:true}, '');
   }
 });
+
+ensureMobileBackGuard();
+window.addEventListener('resize', ensureMobileBackGuard);
 
 document.getElementById('bottomActions').addEventListener('click', event => {
   if (!isMobileLayout()) return;
